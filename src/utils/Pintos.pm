@@ -1,10 +1,10 @@
 # Pintos helper subroutines.
 
-# user path setting
-our ($PINTOS_ROOT) = "/home/physicube/postech";
+# modify this to your installation path
+our ($pintos_path) = "/home/physicube/postech";
 
 # our ($loader_path) = "/home/pintos/pintos-anon/src/threads/build/loader.bin"
-our ($loader_path) = "$PINTOS_ROOT/pintos/src/threads/build/loader.bin";
+our ($loader_path) = "$pintos_path/pintos/src/threads/build/loader.bin";
 
 # Number of bytes available for the loader at the beginning of the MBR.
 # Kernel command-line arguments follow the loader.

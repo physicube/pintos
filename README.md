@@ -1,7 +1,7 @@
 pintos project for POSTECH OS Class
 
 Pre-install
-* modify `$PINTOS_ROOT` in `/src/utils/pintos` and `/src/utils/Pintos.pm` to path of your pintos folder.
+* modify `$pintos_path` in `/src/utils/pintos` and `/src/utils/Pintos.pm` to path of your pintos folder.
 
 * modify `pintos_path` in `/src/utils/pintos-gdb` to path of your pintos folder as well.
 

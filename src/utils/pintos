@@ -1,10 +1,10 @@
 #! /usr/bin/perl -w
 
-# user path setting
-our ($PINTOS_ROOT) = "/home/physicube/postech";
+# modify this to your installation path
+our ($pintos_path) = "/home/physicube/postech";
 
 # our ($kernel_path) = '/home/pintos/pintos-anon/src/threads/build/kernel.bin'
-our ($kernel_path) = "$PINTOS_ROOT/pintos/src/threads/build/kernel.bin";
+our ($kernel_path) = "$pintos_path/pintos/src/threads/build/kernel.bin";
 
 use strict;
 use POSIX;
