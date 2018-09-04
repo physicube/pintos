@@ -1,5 +1,12 @@
 pintos project for POSTECH OS Class
 
+Pre-install
+* modify `$PINTOS_ROOT` in `/src/utils/pintos` and `/src/utils/Pintos.pm` to path of your pintos folder.
+
+* modify `pintos_path` in `/src/utils/pintos-gdb` to path of your pintos folder as well.
+
+* add `$INSTALLATION_PATH/pintos/src/utils` to your path (recommend to edit bashrc)
+
 Installation
 ```
 cd $INSTALLATION_PATH/pintos/src/utils
@@ -14,6 +21,5 @@ make check
 or
 pintos -q run <test_name>
 ```
-Be sure to add /utils/pintos to your path (recommend to edit bashrc)
 
 By Physicube
