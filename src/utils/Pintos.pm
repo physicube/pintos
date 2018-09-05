@@ -1,5 +1,6 @@
 # Pintos helper subroutines.
 
+use Cwd 'abs_path';
 
 # our ($loader_path) = "/home/pintos/pintos-anon/src/threads/build/loader.bin"
 our $src_path = (split(/\/src/, abs_path()))[0];
