@@ -1,7 +1,7 @@
 #! /usr/bin/perl -w
 
 # modify this to your installation path
-our ($pintos_path) = "/home/pintos/pintos-anon"
+our ($pintos_path) = "/home/pintos/pintos-anon";
 
 # our ($kernel_path) = '/home/pintos/pintos-anon/src/threads/build/kernel.bin'
 our ($kernel_path) = "$pintos_path/src/threads/build/kernel.bin";
