@@ -1,10 +1,10 @@
 #! /usr/bin/perl -w
 
-# modify this to your installation path
-our ($pintos_path) = "/home/pintos/pintos-anon";
+use Cwd 'abs_path';
 
 # our ($kernel_path) = '/home/pintos/pintos-anon/src/threads/build/kernel.bin'
-our ($kernel_path) = "$pintos_path/src/threads/build/kernel.bin";
+our $src_path = (split(/\/src/, abs_path()))[0];
+our $kernel_path = "$src_path/src/threads/build/kernel.bin";
 
 use strict;
 use POSIX;

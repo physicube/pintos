@@ -1,10 +1,9 @@
 # Pintos helper subroutines.
 
-# modify this to your installation path
-our ($pintos_path) = "/home/pintos/pintos-anon";
 
 # our ($loader_path) = "/home/pintos/pintos-anon/src/threads/build/loader.bin"
-our ($loader_path) = "$pintos_path/src/threads/build/loader.bin";
+our $src_path = (split(/\/src/, abs_path()))[0];
+our $loader_path = "$src_path/src/threads/build/loader.bin";
 
 # Number of bytes available for the loader at the beginning of the MBR.
 # Kernel command-line arguments follow the loader.
