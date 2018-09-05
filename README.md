@@ -1,5 +1,11 @@
 pintos project for POSTECH OS Class
 
+VM environment
+```
+gcc version : 7.3.0
+qemu version : 2.11.1(Debian 1:2.11+dfsg-1ubuntu7.4)
+```
+
 Pre-install
 * modify `$pintos_path` in `/src/utils/pintos` and `/src/utils/Pintos.pm` to path of your pintos folder.
 
