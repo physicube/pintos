@@ -3,18 +3,19 @@
 
 #include <round.h>
 #include <stdint.h>
+#include <list.h>
 
 /* Number of timer interrupts per second. */
 #define TIMER_FREQ 100
 
-/*
-struct sleep_thread
+/* struct for sleeping_thread to make sleep_list */
+struct sleeping_thread
 {
-    struct thread *t;
+    struct thread *t_sleep;
     int64_t sleep_ticks;
     struct list_elem elem;
 };
-*/
+
 void timer_init (void);
 void timer_calibrate (void);
 

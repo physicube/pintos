@@ -7,6 +7,7 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include "threads/palloc.h"
   
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -93,14 +94,18 @@ timer_elapsed (int64_t then)
 void
 timer_sleep (int64_t ticks) 
 {
-  int64_t start = timer_ticks ();
-  struct thread *t = thread_current ();
-  enum intr_level old_level;
+  struct sleeping_thread *st = palloc_get_page(PAL_ZERO);
+  ASSERT(st != NULL);
 
+  int64_t start = timer_ticks ();
+  struct thread *t = thread_current();
+  enum intr_level old_level;
+  
   ASSERT (intr_get_level () == INTR_ON);
   
-  t->sleep_ticks = ticks + start;
-  list_push_back(&sleep_list, &t->elem);
+  st->sleep_ticks = ticks + start;
+  st->t_sleep = t;
+  list_push_back(&sleep_list, &st->elem);
 
   old_level = intr_disable();
   thread_block();
@@ -187,14 +192,17 @@ timer_interrupt (struct intr_frame *args UNUSED)
 
   int64_t now = timer_ticks ();
 
+  /* for each sleeping thread in sleep_list, if current tick is sleep_ticks,
+     unblock thread and add to ready list */
   for (struct list_elem *e = list_begin(&sleep_list); e != list_end(&sleep_list);)
    {
-     struct thread *t = list_entry(e, struct thread, elem);
+     struct sleeping_thread *st = list_entry(e, struct sleeping_thread, elem);
+     struct thread *t = st->t_sleep;
      
-     if (now >= t->sleep_ticks)
+     if (now >= st->sleep_ticks)
      {
-      t->sleep_ticks = 0;
       e = list_remove(e);
+      palloc_free_page(st);
       thread_unblock(t);
      }
      else
