@@ -17,6 +17,9 @@
 #error TIMER_FREQ <= 1000 recommended
 #endif
 
+/* list of the thread which is blocked */
+static struct list sleep_list;
+
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
@@ -37,6 +40,7 @@ timer_init (void)
 {
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+  list_init (&sleep_list);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -90,10 +94,18 @@ void
 timer_sleep (int64_t ticks) 
 {
   int64_t start = timer_ticks ();
+  struct thread *t = thread_current ();
+  enum intr_level old_level;
 
   ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+  
+  t->sleep_ticks = ticks + start;
+  list_push_back(&sleep_list, &t->elem);
+
+  old_level = intr_disable();
+  thread_block();
+  intr_set_level(old_level);
+
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -172,6 +184,23 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+
+  int64_t now = timer_ticks ();
+
+  for (struct list_elem *e = list_begin(&sleep_list); e != list_end(&sleep_list);)
+   {
+     struct thread *t = list_entry(e, struct thread, elem);
+     
+     if (now >= t->sleep_ticks)
+     {
+      t->sleep_ticks = 0;
+      e = list_remove(e);
+      thread_unblock(t);
+     }
+     else
+      e = list_next(e);
+   }
+   
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
