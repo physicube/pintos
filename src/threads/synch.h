@@ -1,6 +1,7 @@
 #ifndef THREADS_SYNCH_H
 #define THREADS_SYNCH_H
 
+#include <debug.h>
 #include <list.h>
 #include <stdbool.h>
 
@@ -35,6 +36,11 @@ struct condition
   {
     struct list waiters;        /* List of waiting threads. */
   };
+
+/* sort waiting threads in semaphore_elem by priority */
+bool
+sema_priority_asc (const struct list_elem *a_, const struct list_elem *b_,
+            void *aux UNUSED);
 
 void cond_init (struct condition *);
 void cond_wait (struct condition *, struct lock *);

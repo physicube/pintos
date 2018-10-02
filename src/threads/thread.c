@@ -200,6 +200,7 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+  /* for preemptive scheduling */
   thread_yield();
 
   return tid;
@@ -238,6 +239,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
+  /* insert in a sorted priority order */
   list_insert_ordered (&ready_list, &t->elem, priority_asc,NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
@@ -309,6 +311,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
+    /* insert in a sorted priority order */
     list_insert_ordered (&ready_list, &cur->elem, priority_asc, NULL);
   cur->status = THREAD_READY;
   schedule ();
@@ -332,11 +335,23 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
+/* sort waiting threads in list of thread by priority */
+bool
+priority_asc (const struct list_elem *a_, const struct list_elem *b_,
+            void *aux UNUSED) 
+{
+  const struct thread *a = list_entry (a_, struct thread, elem);
+  const struct thread *b = list_entry (b_, struct thread, elem);
+  
+  return a->priority > b->priority;
+}
+
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
 {
   thread_current()->priority = new_priority;
+  /* for preemptive scheduling */
   thread_yield();
 }
 
