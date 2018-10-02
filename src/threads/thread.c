@@ -240,7 +240,7 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   /* insert in a sorted priority order */
-  list_insert_ordered (&ready_list, &t->elem, priority_asc,NULL);
+  list_insert_ordered (&ready_list, &t->elem, priority_desc,NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -312,7 +312,7 @@ thread_yield (void)
   old_level = intr_disable ();
   if (cur != idle_thread) 
     /* insert in a sorted priority order */
-    list_insert_ordered (&ready_list, &cur->elem, priority_asc, NULL);
+    list_insert_ordered (&ready_list, &cur->elem, priority_desc, NULL);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -337,7 +337,7 @@ thread_foreach (thread_action_func *func, void *aux)
 
 /* sort waiting threads in list of thread by priority */
 bool
-priority_asc (const struct list_elem *a_, const struct list_elem *b_,
+priority_desc (const struct list_elem *a_, const struct list_elem *b_,
             void *aux UNUSED) 
 {
   const struct thread *a = list_entry (a_, struct thread, elem);
@@ -359,7 +359,8 @@ thread_set_priority (int new_priority)
 int
 thread_get_priority (void) 
 {
-  return thread_current ()->priority;
+  struct thread *t = thread_current();
+  return t->priority;
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -480,7 +481,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
-
+  list_init(&t->donated_locks);
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);

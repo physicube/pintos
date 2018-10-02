@@ -1,6 +1,7 @@
 #ifndef DEVICES_TIMER_H
 #define DEVICES_TIMER_H
 
+#include <debug.h>
 #include <round.h>
 #include <stdint.h>
 #include <list.h>
@@ -15,6 +16,10 @@ struct sleeping_thread
     int64_t sleep_ticks;
     struct list_elem elem;
 };
+
+bool
+sleep_asc (const struct list_elem *a_, const struct list_elem *b_,
+            void *aux UNUSED);
 
 void timer_init (void);
 void timer_calibrate (void);

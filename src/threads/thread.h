@@ -87,7 +87,8 @@ struct thread
     enum thread_status status;          /* Thread state. */
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
-    uint64_t priority;                      /* Priority. */
+    uint64_t priority;                  /* Priority. */
+    struct list donated_locks;
     struct list_elem allelem;           /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
@@ -108,7 +109,7 @@ struct thread
 extern bool thread_mlfqs;
 
 bool
-priority_asc (const struct list_elem *a_, const struct list_elem *b_,
+priority_desc (const struct list_elem *a_, const struct list_elem *b_,
             void *aux UNUSED);
 
 void thread_init (void);

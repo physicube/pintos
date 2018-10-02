@@ -104,11 +104,21 @@ timer_sleep (int64_t ticks)
   
   st->sleep_ticks = ticks + start;
   st->t_sleep = t;
-  list_push_back(&sleep_list, &st->elem);
+  list_insert_ordered(&sleep_list, &st->elem, sleep_asc, NULL);
 
   old_level = intr_disable();
   thread_block();
   intr_set_level(old_level);
+}
+
+bool
+sleep_asc (const struct list_elem *a_, const struct list_elem *b_,
+            void *aux UNUSED) 
+{
+  const struct sleeping_thread *a = list_entry (a_, struct sleeping_thread, elem);
+  const struct sleeping_thread *b = list_entry (b_, struct sleeping_thread, elem);
+  
+  return a->sleep_ticks < b->sleep_ticks;
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -203,7 +213,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
       thread_unblock(t);
      }
      else
-      e = list_next(e);
+      break;
    }
 }
 
