@@ -70,6 +70,7 @@ sema_down (struct semaphore *sema)
   while (sema->value == 0) 
     {
       /* wait in list with sorted priority order */
+      list_sort(&sema->waiters, priority_desc, NULL);
       list_insert_ordered (&sema->waiters, &thread_current ()->elem, priority_desc, NULL);
       thread_block ();
     }
@@ -115,6 +116,7 @@ sema_up (struct semaphore *sema)
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
+  list_sort(&sema->waiters, priority_desc, NULL);
   if (!list_empty (&sema->waiters)) 
     thread_unblock (list_entry (list_pop_front (&sema->waiters),
                                 struct thread, elem));
