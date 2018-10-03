@@ -31,6 +31,7 @@
 #include <string.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/malloc.h"
 
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
@@ -196,19 +197,21 @@ lock_init (struct lock *lock)
 void
 lock_acquire (struct lock *lock)
 {
-  struct thread *t = thread_current();
-  struct thread *holder = lock->holder;
-
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
+  
+  struct thread *t = thread_current();
+  struct thread *holder = lock->holder;
 
   if (holder != NULL)
   {
-    if (holder-> priority < t->priority)
+    if (holder->priority < t->priority)
     {
-      struct donated_lock d_lock;
-
+      struct donated_lock *d_lock = malloc(sizeof(struct donated_lock));
+      d_lock->lock = lock;
+      d_lock->donated_priority = t->priority;
+      list_insert_ordered(&holder->donated_locks, &d_lock->elem, donated_priority_desc, NULL);
     }
   }
   sema_down (&lock->semaphore);
@@ -245,7 +248,24 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
+  
+  struct thread *t = thread_current();
 
+  if (!list_empty(&t->donated_locks))
+  {
+    for (struct list_elem *e = list_begin(&t->donated_locks); e != list_end(&t->donated_locks);)
+    {
+      struct donated_lock *d_lock = list_entry(e, struct donated_lock, elem);
+      
+      if (d_lock->lock == lock)
+      {
+        e = list_remove(e);
+        free(d_lock);
+      }
+      else
+        e = list_next(e);
+    }
+  }
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 }
@@ -278,6 +298,16 @@ sema_priority_desc (const struct list_elem *a_, const struct list_elem *b_,
   const struct semaphore_elem *b = list_entry (b_, struct semaphore_elem, elem);
   
   return a->priority > b->priority;
+}
+
+bool
+donated_priority_desc (const struct list_elem *a_, const struct list_elem *b_,
+            void *aux UNUSED) 
+{
+  const struct donated_lock *a = list_entry (a_, struct donated_lock, elem);
+  const struct donated_lock *b = list_entry (b_, struct donated_lock, elem);
+  
+  return a->donated_priority > b->donated_priority;
 }
 
 /* Initializes condition variable COND.  A condition variable

@@ -342,8 +342,16 @@ priority_desc (const struct list_elem *a_, const struct list_elem *b_,
 {
   const struct thread *a = list_entry (a_, struct thread, elem);
   const struct thread *b = list_entry (b_, struct thread, elem);
+  uint64_t priority_a = a->priority;
+  uint64_t priority_b = b->priority;
   
-  return a->priority > b->priority;
+  if (!list_empty(&a->donated_locks))
+    priority_a = list_entry(list_front(&a->donated_locks), 
+              struct donated_lock, elem)->donated_priority;
+  if (!list_empty(&b->donated_locks))
+    priority_b = list_entry(list_front(&b->donated_locks), 
+              struct donated_lock, elem)->donated_priority;            
+  return priority_a > priority_b;
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
@@ -360,7 +368,12 @@ int
 thread_get_priority (void) 
 {
   struct thread *t = thread_current();
-  return t->priority;
+  uint64_t actual_priority = t->priority;
+  if (!list_empty(&t->donated_locks))
+    actual_priority = list_entry(list_front(&t->donated_locks), 
+              struct donated_lock, elem)->donated_priority;
+
+  return actual_priority;
 }
 
 /* Sets the current thread's nice value to NICE. */

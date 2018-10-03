@@ -48,6 +48,9 @@ struct condition
 bool
 sema_priority_desc (const struct list_elem *a_, const struct list_elem *b_,
             void *aux UNUSED);
+bool
+donated_priority_desc (const struct list_elem *a_, const struct list_elem *b_,
+            void *aux UNUSED);
 
 void cond_init (struct condition *);
 void cond_wait (struct condition *, struct lock *);
