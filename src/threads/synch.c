@@ -70,8 +70,8 @@ sema_down (struct semaphore *sema)
   while (sema->value == 0) 
     {
       /* wait in list with sorted priority order */
-      list_sort(&sema->waiters, priority_desc, NULL);
       list_insert_ordered (&sema->waiters, &thread_current ()->elem, priority_desc, NULL);
+      list_sort(&sema->waiters, priority_desc, NULL);
       thread_block ();
     }
   sema->value--;
@@ -213,27 +213,11 @@ lock_acquire (struct lock *lock)
       struct donated_lock *d_lock = malloc(sizeof(struct donated_lock));
       d_lock->lock = lock;
       d_lock->thread_donated = t;
-      list_sort(&holder->donated_locks, donated_priority_desc, NULL);
       list_insert_ordered(&holder->donated_locks, &d_lock->elem, donated_priority_desc, NULL);
     }
   }
   sema_down (&lock->semaphore);
   lock->holder = t;
-
-  for (struct list_elem *e = list_begin(&lock->semaphore.waiters); e != list_end(&lock->semaphore.waiters);)
-    {
-      struct thread *blocked= list_entry(e, struct thread, elem);
-
-      if (t->priority <  get_actual_priority(blocked))
-      {
-        struct donated_lock *d_lock = malloc(sizeof(struct donated_lock));
-        d_lock->lock = lock;
-        d_lock->thread_donated = blocked;
-        list_sort(&t->donated_locks, donated_priority_desc, NULL);
-        list_insert_ordered(&t->donated_locks, &d_lock->elem, donated_priority_desc, NULL);
-      }
-        e = list_next(e);
-    }
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -269,6 +253,9 @@ lock_release (struct lock *lock)
   
   struct thread *t = thread_current();
 
+  lock->holder = NULL;
+  sema_up (&lock->semaphore);
+  
   if (!list_empty(&t->donated_locks))
   {
     for (struct list_elem *e = list_begin(&t->donated_locks); e != list_end(&t->donated_locks);)
@@ -283,8 +270,6 @@ lock_release (struct lock *lock)
         e = list_next(e);
     }
   } 
-  lock->holder = NULL;
-  sema_up (&lock->semaphore);
 }
 
 /* Returns true if the current thread holds LOCK, false
