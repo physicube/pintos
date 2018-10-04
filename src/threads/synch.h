@@ -28,7 +28,7 @@ struct lock
 struct donated_lock
   {
     struct lock *lock;
-    uint64_t donated_priority;
+    struct thread *thread_donated;
     struct list_elem elem;
   };
 

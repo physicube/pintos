@@ -112,6 +112,8 @@ bool
 priority_desc (const struct list_elem *a_, const struct list_elem *b_,
             void *aux UNUSED);
 
+uint64_t get_actual_priority(const struct thread *t);
+
 void thread_init (void);
 void thread_start (void);
 

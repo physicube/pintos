@@ -208,16 +208,32 @@ lock_acquire (struct lock *lock)
 
   if (holder != NULL)
   {
-    if (holder->priority < t->priority)
+    if (holder->priority < get_actual_priority(t))
     {
       struct donated_lock *d_lock = malloc(sizeof(struct donated_lock));
       d_lock->lock = lock;
-      d_lock->donated_priority = t->priority;
+      d_lock->thread_donated = t;
+      list_sort(&holder->donated_locks, donated_priority_desc, NULL);
       list_insert_ordered(&holder->donated_locks, &d_lock->elem, donated_priority_desc, NULL);
     }
   }
   sema_down (&lock->semaphore);
   lock->holder = t;
+
+  for (struct list_elem *e = list_begin(&lock->semaphore.waiters); e != list_end(&lock->semaphore.waiters);)
+    {
+      struct thread *blocked= list_entry(e, struct thread, elem);
+
+      if (t->priority <  get_actual_priority(blocked))
+      {
+        struct donated_lock *d_lock = malloc(sizeof(struct donated_lock));
+        d_lock->lock = lock;
+        d_lock->thread_donated = blocked;
+        list_sort(&t->donated_locks, donated_priority_desc, NULL);
+        list_insert_ordered(&t->donated_locks, &d_lock->elem, donated_priority_desc, NULL);
+      }
+        e = list_next(e);
+    }
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -258,7 +274,6 @@ lock_release (struct lock *lock)
     for (struct list_elem *e = list_begin(&t->donated_locks); e != list_end(&t->donated_locks);)
     {
       struct donated_lock *d_lock = list_entry(e, struct donated_lock, elem);
-      
       if (d_lock->lock == lock)
       {
         e = list_remove(e);
@@ -267,7 +282,7 @@ lock_release (struct lock *lock)
       else
         e = list_next(e);
     }
-  }
+  } 
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 }
@@ -298,7 +313,7 @@ sema_priority_desc (const struct list_elem *a_, const struct list_elem *b_,
 {
   const struct semaphore_elem *a = list_entry (a_, struct semaphore_elem, elem);
   const struct semaphore_elem *b = list_entry (b_, struct semaphore_elem, elem);
-  
+
   return a->priority > b->priority;
 }
 
@@ -306,10 +321,12 @@ bool
 donated_priority_desc (const struct list_elem *a_, const struct list_elem *b_,
             void *aux UNUSED) 
 {
-  const struct donated_lock *a = list_entry (a_, struct donated_lock, elem);
-  const struct donated_lock *b = list_entry (b_, struct donated_lock, elem);
-  
-  return a->donated_priority > b->donated_priority;
+  const struct thread *a = list_entry (a_, struct donated_lock, elem)->thread_donated;
+  const struct thread *b = list_entry (b_, struct donated_lock, elem)->thread_donated;
+  uint64_t priority_a = get_actual_priority(a);
+  uint64_t priority_b = get_actual_priority(b);   
+
+  return priority_a > priority_b;
 }
 
 /* Initializes condition variable COND.  A condition variable
@@ -355,7 +372,7 @@ cond_wait (struct condition *cond, struct lock *lock)
   
   sema_init (&waiter.semaphore, 0);
   /* set priority to waiting thread's priority and insert to list in sorted order */
-  waiter.priority = thread_current()->priority; 
+  waiter.priority = get_actual_priority(thread_current()); 
   list_insert_ordered (&cond->waiters, &waiter.elem, sema_priority_desc, NULL);
 
   lock_release (lock);
