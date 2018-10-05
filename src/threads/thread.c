@@ -200,6 +200,8 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+  /* for preemptive scheduling */
+  thread_yield();
 
   return tid;
 }
@@ -237,7 +239,9 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  /* insert in a sorted priority order */
+  list_sort(&ready_list, priority_desc, NULL);
+  list_insert_ordered (&ready_list, &t->elem, priority_desc, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -307,8 +311,10 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
+  list_sort(&ready_list, priority_desc, NULL);
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    /* insert in a sorted priority order */
+    list_insert_ordered (&ready_list, &cur->elem, priority_desc, NULL);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -331,18 +337,45 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
+/* sort waiting threads in list of thread by priority */
+bool
+priority_desc (const struct list_elem *a_, const struct list_elem *b_,
+            void *aux UNUSED) 
+{
+  const struct thread *a = list_entry (a_, struct thread, elem);
+  const struct thread *b = list_entry (b_, struct thread, elem);
+  uint64_t priority_a = get_actual_priority(a);
+  uint64_t priority_b = get_actual_priority(b);   
+
+  return priority_a > priority_b;
+}
+
+uint64_t get_actual_priority(const struct thread *t)
+{
+  if (!list_empty(&t->donated_locks))
+  {
+    const struct thread *donated = list_entry(list_front(&t->donated_locks), 
+              struct donated_lock, elem)->thread_donated;
+    return get_actual_priority(donated);
+  }
+  else
+    return t->priority;
+}
+
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  thread_current()->priority = new_priority;
+  /* for preemptive scheduling */
+  thread_yield();
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) 
 {
-  return thread_current ()->priority;
+  return get_actual_priority(thread_current());
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -463,7 +496,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
-
+  list_init(&t->donated_locks);
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
@@ -559,7 +592,6 @@ schedule (void)
   ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (cur->status != THREAD_RUNNING);
   ASSERT (is_thread (next));
-
   if (cur != next)
     prev = switch_threads (cur, next);
   thread_schedule_tail (prev);

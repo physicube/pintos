@@ -7,6 +7,7 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include "threads/palloc.h"
   
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -16,6 +17,9 @@
 #if TIMER_FREQ > 1000
 #error TIMER_FREQ <= 1000 recommended
 #endif
+
+/* list of the thread which is blocked */
+static struct list sleep_list;
 
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
@@ -37,6 +41,7 @@ timer_init (void)
 {
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+  list_init (&sleep_list);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -89,11 +94,31 @@ timer_elapsed (int64_t then)
 void
 timer_sleep (int64_t ticks) 
 {
-  int64_t start = timer_ticks ();
+  struct sleeping_thread *st = palloc_get_page(PAL_ZERO);
+  ASSERT(st != NULL);
 
+  int64_t start = timer_ticks ();
+  struct thread *t = thread_current();
+  enum intr_level old_level;
   ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+  
+  st->sleep_ticks = ticks + start;
+  st->t_sleep = t;
+  list_insert_ordered(&sleep_list, &st->elem, sleep_asc, NULL);
+
+  old_level = intr_disable();
+  thread_block();
+  intr_set_level(old_level);
+}
+
+bool
+sleep_asc (const struct list_elem *a_, const struct list_elem *b_,
+            void *aux UNUSED) 
+{
+  const struct sleeping_thread *a = list_entry (a_, struct sleeping_thread, elem);
+  const struct sleeping_thread *b = list_entry (b_, struct sleeping_thread, elem);
+  
+  return a->sleep_ticks < b->sleep_ticks;
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -172,6 +197,24 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+  int64_t now = timer_ticks ();
+
+  /* for each sleeping thread in sleep_list, if current tick is sleep_ticks,
+     unblock thread and add to ready list */
+  for (struct list_elem *e = list_begin(&sleep_list); e != list_end(&sleep_list);)
+   {
+     struct sleeping_thread *st = list_entry(e, struct sleeping_thread, elem);
+     struct thread *t = st->t_sleep;
+     
+     if (now >= st->sleep_ticks)
+     {
+      e = list_remove(e);
+      palloc_free_page(st);
+      thread_unblock(t);
+     }
+     else
+      break;
+   }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
