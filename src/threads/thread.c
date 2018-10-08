@@ -362,14 +362,14 @@ priority_desc (const struct list_elem *a_, const struct list_elem *b_,
 {
   const struct thread *a = list_entry (a_, struct thread, elem);
   const struct thread *b = list_entry (b_, struct thread, elem);
-  uint64_t priority_a = get_actual_priority(a);
-  uint64_t priority_b = get_actual_priority(b);   
+  int priority_a = get_actual_priority(a);
+  int priority_b = get_actual_priority(b);   
 
   return priority_a > priority_b;
 }
 
 /* get thread t's priority including donated priority */
-uint64_t get_actual_priority(const struct thread *t)
+int get_actual_priority(const struct thread *t)
 {
   if (!list_empty(&t->donated_locks))
   {
