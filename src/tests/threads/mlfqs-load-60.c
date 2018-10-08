@@ -120,6 +120,7 @@ test_mlfqs_load_60 (void)
 
   start_time = timer_ticks ();
   msg ("Starting %d niced load threads...", THREAD_CNT);
+  printf("Main Thread's priority : %lld\n",thread_current()->priority);
   for (i = 0; i < THREAD_CNT; i++) 
     {
       char name[16];
@@ -148,6 +149,7 @@ load_thread (void *aux UNUSED)
   int64_t exit_time = spin_time + 60 * TIMER_FREQ;
 
   thread_set_nice (20);
+  printf("Sub priority : %lld, recent cpu : %d\n",thread_current()->priority,thread_current()->recent_cpu);
   timer_sleep (sleep_time - timer_elapsed (start_time));
   while (timer_elapsed (start_time) < spin_time)
     continue;
