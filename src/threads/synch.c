@@ -70,8 +70,8 @@ sema_down (struct semaphore *sema)
   while (sema->value == 0) 
     {
       /* wait in list with sorted priority order */
-      list_insert_ordered (&sema->waiters, &thread_current ()->elem, priority_desc, NULL);
       list_sort(&sema->waiters, priority_desc, NULL);
+      list_insert_ordered (&sema->waiters, &thread_current ()->elem, priority_desc, NULL);
       thread_block ();
     }
   sema->value--;
@@ -211,6 +211,7 @@ lock_acquire (struct lock *lock)
     if (holder->priority < get_actual_priority(t))
     {
       struct donated_lock *d_lock = malloc(sizeof(struct donated_lock));
+
       d_lock->lock = lock;
       d_lock->thread_donated = t;
       list_insert_ordered(&holder->donated_locks, &d_lock->elem, donated_priority_desc, NULL);
@@ -269,7 +270,7 @@ lock_release (struct lock *lock)
       else
         e = list_next(e);
     }
-  } 
+  }
 }
 
 /* Returns true if the current thread holds LOCK, false

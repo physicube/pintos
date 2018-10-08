@@ -149,6 +149,7 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+/* additional function for mlfqs scheduler */
 void thread_mlfqs_increase_recent_cpu(void);
 void thread_mlfqs_set_load_avg(void);
 void thread_mlfqs_set_other(void);

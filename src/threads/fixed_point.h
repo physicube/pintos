@@ -13,5 +13,4 @@
 #define F_F_MUL(x, y) ((int64_t)(x)) * (y) / (FR)
 #define F_F_DIV(x, y) ((int64_t)(x)) * (FR) / (y)
 
-
 #endif

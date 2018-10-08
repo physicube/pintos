@@ -28,7 +28,7 @@ struct lock
 struct donated_lock
   {
     struct lock *lock;
-    struct thread *thread_donated;
+    struct thread *thread_donated; /* The thread donated priority */
     struct list_elem elem;
   };
 
@@ -44,10 +44,11 @@ struct condition
     struct list waiters;        /* List of waiting threads. */
   };
 
-/* sort waiting threads in semaphore_elem by priority */
+/* less func to sort waiting threads including semaphore_elem by priority */
 bool
 sema_priority_desc (const struct list_elem *a_, const struct list_elem *b_,
             void *aux UNUSED);
+/* less func to sort waiting threads including donated_lock by priority */
 bool
 donated_priority_desc (const struct list_elem *a_, const struct list_elem *b_,
             void *aux UNUSED);

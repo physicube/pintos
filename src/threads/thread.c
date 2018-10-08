@@ -218,8 +218,8 @@ thread_create (const char *name, int priority,
     calculate_recent_cpu(thread_current(),NULL); // for main thread
     calc_priority(thread_current(),NULL);        // for main thread
   }
-  if(t->priority > thread_current()->priority) // main thread vs made thread
-    thread_yield();
+  
+  thread_yield();
 
   return tid;
 }
@@ -368,6 +368,7 @@ priority_desc (const struct list_elem *a_, const struct list_elem *b_,
   return priority_a > priority_b;
 }
 
+/* get thread t's priority including donated priority */
 uint64_t get_actual_priority(const struct thread *t)
 {
   if (!list_empty(&t->donated_locks))
