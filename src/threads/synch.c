@@ -289,7 +289,7 @@ struct semaphore_elem
   {
     struct list_elem elem;              /* List element. */
     struct semaphore semaphore;         /* This semaphore. */
-    uint64_t priority;                  /* waiting thread's priority. */
+    int priority;                  /* waiting thread's priority. */
   };
 
 /* sort waiting threads in list of semaphore_elem by priority */
@@ -309,8 +309,8 @@ donated_priority_desc (const struct list_elem *a_, const struct list_elem *b_,
 {
   const struct thread *a = list_entry (a_, struct donated_lock, elem)->thread_donated;
   const struct thread *b = list_entry (b_, struct donated_lock, elem)->thread_donated;
-  uint64_t priority_a = get_actual_priority(a);
-  uint64_t priority_b = get_actual_priority(b);   
+  int priority_a = get_actual_priority(a);
+  int priority_b = get_actual_priority(b);   
 
   return priority_a > priority_b;
 }

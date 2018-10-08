@@ -90,7 +90,7 @@ struct thread
     enum thread_status status;          /* Thread state. */
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
-    uint64_t priority;                  /* Priority. */
+    int priority;                  /* Priority. */
     struct list donated_locks;
     struct list_elem allelem;           /* List element for all threads list. */
 
@@ -116,7 +116,7 @@ bool
 priority_desc (const struct list_elem *a_, const struct list_elem *b_,
             void *aux UNUSED);
 
-uint64_t get_actual_priority(const struct thread *t);
+int get_actual_priority(const struct thread *t);
 
 void thread_init (void);
 void thread_start (void);
