@@ -462,8 +462,6 @@ void thread_mlfqs_set_other(void)
 {
   enum intr_level old_level = intr_disable ();
   thread_foreach (calculate_recent_cpu, NULL); // calc recent cpu for all thread lists.
-  thread_foreach (calc_priority, NULL);
-  resort_ready_list_by_priority();
   intr_set_level (old_level);
 }
 
