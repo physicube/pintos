@@ -2,5 +2,7 @@
 #define USERPROG_SYSCALL_H
 
 void syscall_init (void);
+void exit(int status);
+void write(int fd, char* buffer, unsigned size);
 
 #endif /* userprog/syscall.h */
