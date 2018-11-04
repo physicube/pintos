@@ -375,6 +375,18 @@ thread_get_recent_cpu (void)
   /* Not yet implemented. */
   return 0;
 }
+
+struct thread * tid_to_thread(tid_t tid)
+{
+  for (struct list_elem *e = list_begin (&all_list); e != list_end (&all_list);
+       e = list_next (e))
+  {
+    struct thread *t = list_entry(e, struct thread, allelem);
+    if (t->tid == tid)
+      return t;
+  }
+  return NULL;
+}
 
 /* Idle thread.  Executes when no other thread is ready to run.
 
@@ -463,6 +475,13 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+
+  #ifdef USERPROG
+    t->parent = NULL;
+    list_init(&t->child_threads);
+    lock_init(&t->syscall_lock);
+    cond_init(&t->syscall_condvar);
+  #endif
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

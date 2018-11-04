@@ -4,6 +4,7 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/malloc.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 
@@ -40,9 +41,27 @@ syscall_handler (struct intr_frame *f)
     case SYS_EXEC :
     {
       // needs syncronization
-      const char *cmd_line = *(char **)(f->esp + 4); 
+      const char *cmd_line = *(char **)(f->esp + 4);
+      struct thread *parent = thread_current();
+
+      lock_acquire(&parent->syscall_lock);
       pid_t pid = process_execute(cmd_line);
 
+      if (pid != PID_ERROR)
+      {
+        struct thread *child = tid_to_thread(pid);
+        struct child_thread *ct  = malloc(sizeof(struct child_thread));
+        struct condition *condvar = &parent->syscall_condvar;
+
+        while(!list_empty(&condvar->waiters))
+        {
+          cond_wait(condvar, &parent->syscall_lock);
+        }
+        ct->child = child;
+        list_push_back(&parent->child_threads, &child->elem);
+        child->parent = parent;
+      }
+      lock_release(&parent->syscall_lock);
       f->eax = pid;
       break;
     }
