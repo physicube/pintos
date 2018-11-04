@@ -1,0 +1,13 @@
+{
+    "files.associations": {
+        "array": "c",
+        "initializer_list": "c",
+        "utility": "c",
+        "inode.h": "c",
+        "unordered_map": "c",
+        "vector": "c",
+        "system_error": "c",
+        "*.inc": "c",
+        "stdio.h": "c"
+    }
+}

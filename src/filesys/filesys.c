@@ -6,6 +6,7 @@
 #include "filesys/free-map.h"
 #include "filesys/inode.h"
 #include "filesys/directory.h"
+#include "threads/thread.h"
 
 /* Partition that contains the file system. */
 struct block *fs_device;
@@ -66,6 +67,8 @@ filesys_create (const char *name, off_t initial_size)
 struct file *
 filesys_open (const char *name)
 {
+ // printf("%s : file: %s OPEN!\n",thread_current()->name,name);
+
   struct dir *dir = dir_open_root ();
   struct inode *inode = NULL;
 
@@ -73,7 +76,8 @@ filesys_open (const char *name)
     dir_lookup (dir, name, &inode);
   dir_close (dir);
 
-  return file_open (inode);
+  thread_current()->current_file = file_open (inode);
+  return thread_current()->current_file;
 }
 
 /* Deletes the file named NAME.

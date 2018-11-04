@@ -302,6 +302,11 @@ void
 thread_yield (void) 
 {
   struct thread *cur = thread_current ();
+  #ifdef USERPROG  
+  /* Activate the new address space. */  
+  if (cur->pagedir == NULL)  
+    return;  
+  #endif  
   enum intr_level old_level;
   
   ASSERT (!intr_context ());
@@ -463,6 +468,16 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+  
+  #ifdef USERPROG
+  t->tcb=NULL;
+  t->current_file=NULL;
+  lock_init(&t->child_lock);
+  list_init(&t->child_tcb);
+  list_init(&t->fd);
+  cond_init(&t->child_cond);
+  sema_init(&t->sema, 0);
+  #endif
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
@@ -582,3 +597,28 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+bool search_thread_name_same(struct file *file, struct thread * master)
+{
+  struct list_elem *tmp_ele;
+  struct thread * t;
+  size_t cnt=0;
+  size_t lsize = list_size(&all_list);
+  int i;
+ 
+  tmp_ele = list_front(&all_list);
+  for(i=0;i<lsize ; tmp_ele = list_next(tmp_ele), i++)
+  {
+    t = list_entry(tmp_ele, struct thread, allelem);
+    //printf("%s : %x,  %s: %x\n",master->name,master->current_file,t->name,t->current_file);
+   
+    if((unsigned int)(file) == (unsigned int)(t->current_file))
+    {
+      cnt++;
+    }
+  }
+  if(cnt > 1)
+    return false;
+  else if(cnt == 1)
+    return true;
+}
