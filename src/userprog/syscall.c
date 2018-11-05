@@ -128,7 +128,7 @@ syscall_handler (struct intr_frame *f)
     sys_exit(-1,NULL);
   }
   read_mem(&syscall_number, esp, sizeof(syscall_number));
-  printf("syscall num : %d\n",syscall_number);
+  //printf("syscall num : %d\n",syscall_number);
   switch(syscall_number)
   {
     case SYS_HALT: // 0
@@ -275,7 +275,7 @@ sys_create(char *name, size_t size, struct intr_frame *f)
 void 
 sys_write(int fd_, void * buffer, int size, struct intr_frame *f)
 {
-  printf("name : %s, buffer: %s, !!! fd: %d, size : %d\n",thread_current()->name,(char *)buffer,fd_,size);
+  ///printf("name : %s, buffer: %s, !!! fd: %d, size : %d\n",thread_current()->name,(char *)buffer,fd_,size);
   if(buffer == NULL)
     sys_exit(-1,NULL);
   check_memory_byte_by_byte(buffer,sizeof(buffer));
@@ -317,11 +317,8 @@ sys_write(int fd_, void * buffer, int size, struct intr_frame *f)
     }
     if(fd !=NULL)
     {
-      //printf("file addr : %x, ready to write file!\n",(unsigned int)fd->f);
-      //if(search_thread_name_same(fd->f, fd->master))
+      //printf("file addr : %x, ready to write file!\n",(unsigned int)fd->f)
         f->eax = file_write(fd->f,buffer,size);
-      //else
-        //f->eax = 0;
       //printf("Return value of file_write : %d\n",f->eax);
       lock_release(&memory_lock);
       return;
@@ -441,10 +438,7 @@ sys_read(int fd_, void * buffer, int size, struct intr_frame *f)
           return;
         }
       }
-      if((fd->master->current_file) != NULL)
-        f->eax = file_read(fd->master->current_file, buffer, size);
-      else
-        f->eax = file_read(fd->f,buffer,size);
+      f->eax = file_read(fd->f,buffer,size);
       lock_release(&memory_lock);
       return ;
     }    
@@ -476,7 +470,10 @@ sys_filesize(int fd_, struct intr_frame *f)
   if(fd == NULL)
     f->eax =-1;
   else 
+  {
     f->eax = file_length(fd->f);
+    //printf("%s called fd:%d size!\n",thread_current()->name,fd_);  
+  }
 }
 
 void

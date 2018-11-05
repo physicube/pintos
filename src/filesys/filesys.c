@@ -67,7 +67,7 @@ filesys_create (const char *name, off_t initial_size)
 struct file *
 filesys_open (const char *name)
 {
- // printf("%s : file: %s OPEN!\n",thread_current()->name,name);
+  //printf("%s : file: %s OPEN!\n",thread_current()->name,name);
 
   struct dir *dir = dir_open_root ();
   struct inode *inode = NULL;
@@ -75,9 +75,7 @@ filesys_open (const char *name)
   if (dir != NULL)
     dir_lookup (dir, name, &inode);
   dir_close (dir);
-
-  thread_current()->current_file = file_open (inode);
-  return thread_current()->current_file;
+  return file_open (inode);
 }
 
 /* Deletes the file named NAME.

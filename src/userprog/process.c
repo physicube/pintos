@@ -252,7 +252,7 @@ process_exit (void)
   struct list_elem *elem_;
   uint32_t *pd;
   
-  
+  //printf("%s is in process_exit!\n",thread_current()->name);
   /* remove all list child_tcb and determine whether child process is dead or not */
   if(!list_empty(&cur->child_tcb))
   {
@@ -279,7 +279,11 @@ process_exit (void)
       palloc_free_page(fd); 
     }
   } 
-
+  if(cur->current_file)
+  {
+    file_allow_write(cur->current_file);
+    file_close(cur->current_file);
+  }
   
   /* wake up parent process */
   cur->tcb->exit = true;
@@ -507,7 +511,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   success = true;
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
+  //file_close (file);
   return success;
 }
 
