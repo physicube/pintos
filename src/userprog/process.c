@@ -70,7 +70,10 @@ start_process (void *file_name_)
 
   /* for exec syscall */
   lock_acquire(&child->syscall_lock);
+
+  child->load_success = true;
   cond_signal(&child->syscall_condvar, &child->syscall_lock);
+
   lock_release(&child->syscall_lock);
   
   if (!success) 
@@ -98,11 +101,34 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid) 
 {
-  while (true)
-  {
-    thread_yield();
-  }
-  return -1;
+  struct thread *parent = thread_current();
+  struct thread *child = tid_to_thread(child_tid);
+
+  if (child == NULL)
+    return -1;
+
+  bool is_child = false;
+  for (struct list_elem *e = list_begin (&parent->child_threads); e != list_end (&parent->child_threads);
+      e = list_next (e))
+    {
+      struct child_thread *ct = list_entry(e, struct child_thread, elem);
+      if (ct->child == child)
+      {
+        is_child = true;
+        break;
+      }
+    }
+  if (!(is_child && !child->wait_called))
+    return -1;
+  
+  lock_acquire(&child->syscall_lock);
+  while(child->status != THREAD_DYING)
+    cond_wait(&child->syscall_condvar, &child->syscall_lock);
+  lock_release(&child->syscall_lock);
+  
+  child->wait_called = true;
+
+  return child->exit_status;
 }
 
 /* Free the current process's resources. */

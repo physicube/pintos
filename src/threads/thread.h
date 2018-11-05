@@ -97,6 +97,9 @@ struct thread
     /* for user process */
     struct list child_threads;
     struct thread *parent;
+    bool load_success;
+    bool wait_called;
+    int exit_status;
 
     struct lock syscall_lock;
     struct condition syscall_condvar;

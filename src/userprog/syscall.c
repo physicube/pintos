@@ -31,37 +31,45 @@ syscall_handler (struct intr_frame *f)
     case SYS_EXIT : 
     { 
       int status = *(int*)(f->esp + 4);
+      struct thread *t = thread_current();
 
-      printf ("%s: exit(%d)\n", thread_current()->name, status); 
+      printf ("%s: exit(%d)\n", t->name, status); 
+      t->exit_status = status;
       thread_exit();
+
+      lock_acquire(&t->syscall_lock);
+      cond_signal(&t->syscall_condvar, &t->syscall_lock);
+      lock_release(&t->syscall_lock);
+
 
       f->eax = status;
       break; 
     }
     case SYS_EXEC :
     {
-      const char *cmd_line = *(char **)(f->esp + 4);
+      char *cmd_line = *(char **)(f->esp + 4);
       struct thread *parent = thread_current();
-
-      lock_acquire(&parent->syscall_lock);
+      
       pid_t pid = process_execute(cmd_line);
-
+      
       if (pid != PID_ERROR)
       {
         struct thread *child = tid_to_thread(pid);
         struct child_thread *ct  = malloc(sizeof(struct child_thread));
         struct condition *condvar = &child->syscall_condvar;
+        struct lock *lock = &child->syscall_lock;
 
-        while(!list_empty(&condvar->waiters))
-        {
-          cond_wait(condvar, &parent->syscall_lock);
-        }
-        
+        lock_acquire(lock);
+
+        while(!child->load_success)
+          cond_wait(condvar, lock);
+
+        lock_release(lock);
+
         ct->child = child;
-        list_push_back(&parent->child_threads, &child->elem);
+        list_push_back(&parent->child_threads, &ct->elem);
         child->parent = parent;
       }
-      lock_release(&parent->syscall_lock);
 
       f->eax = pid;
       break;

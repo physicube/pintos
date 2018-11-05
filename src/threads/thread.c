@@ -477,6 +477,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
 
   #ifdef USERPROG
+    t->load_success = false;
+    t->wait_called = false;
+    t->exit_status = -1;
     t->parent = NULL;
     list_init(&t->child_threads);
     lock_init(&t->syscall_lock);
