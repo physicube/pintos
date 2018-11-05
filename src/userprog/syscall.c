@@ -40,7 +40,6 @@ syscall_handler (struct intr_frame *f)
     }
     case SYS_EXEC :
     {
-      // needs syncronization
       const char *cmd_line = *(char **)(f->esp + 4);
       struct thread *parent = thread_current();
 
@@ -51,17 +50,19 @@ syscall_handler (struct intr_frame *f)
       {
         struct thread *child = tid_to_thread(pid);
         struct child_thread *ct  = malloc(sizeof(struct child_thread));
-        struct condition *condvar = &parent->syscall_condvar;
+        struct condition *condvar = &child->syscall_condvar;
 
         while(!list_empty(&condvar->waiters))
         {
           cond_wait(condvar, &parent->syscall_lock);
         }
+        
         ct->child = child;
         list_push_back(&parent->child_threads, &child->elem);
         child->parent = parent;
       }
       lock_release(&parent->syscall_lock);
+
       f->eax = pid;
       break;
     }

@@ -17,6 +17,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (char *cmdline, void (**eip) (void), void **esp);
@@ -65,9 +66,13 @@ start_process (void *file_name_)
   
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  struct thread *parent = thread_current()->parent;
+  struct thread *child = thread_current();
 
-  lock_acquire(&parent->)
+  /* for exec syscall */
+  lock_acquire(&child->syscall_lock);
+  cond_signal(&child->syscall_condvar, &child->syscall_lock);
+  lock_release(&child->syscall_lock);
+  
   if (!success) 
     thread_exit ();
 
@@ -96,7 +101,6 @@ process_wait (tid_t child_tid)
   while (true)
   {
     thread_yield();
-    
   }
   return -1;
 }
