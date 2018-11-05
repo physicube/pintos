@@ -35,10 +35,13 @@ process_execute (const char *file_name)
   struct tcb *tcb=NULL;
   tid_t tid;
 
-  lock_acquire(&thread_current()->child_lock);
+  //lock_acquire(&thread_current()->child_lock);
   fn_copy = palloc_get_page (0);
   program = palloc_get_page (0);
   tcb = palloc_get_page(0);
+  //fn_copy = calloc(1,sizeof*fn_copy);
+  //program = calloc(1,sizeof*program);
+  //tcb = calloc(1, sizeof*tcb);
 
   if(tcb == NULL || fn_copy == NULL || program == NULL)
     PANIC("NULL NULL NULL!!");
@@ -58,12 +61,13 @@ process_execute (const char *file_name)
   tcb->me = NULL;
   tcb->goa = false;
   tcb->parent = thread_current();
-  lock_release(&thread_current()->child_lock);
+  //lock_release(&thread_current()->child_lock);
   tid = thread_create (program, PRI_DEFAULT, start_process, tcb);
   sema_down(&tcb->sema); //wait until load and push argv to stack
-  lock_acquire(&thread_current()->child_lock);
-  if(tcb->tid == tid)
+  //lock_acquire(&thread_current()->child_lock);
+  if(tcb->tid > 0)
   {
+    //printf("Parent : %d  | Child : %d LISTPUSHBACK!\n",thread_current()->tid,tid);
     list_push_back(&thread_current()->child_tcb, &tcb->elem);
   }
   else
@@ -75,10 +79,12 @@ process_execute (const char *file_name)
     palloc_free_page(fn_copy);
     palloc_free_page(program);
   }
-  lock_release(&thread_current()->child_lock);
+  //lock_release(&thread_current()->child_lock);
   return tid;
   
   end:
+  //printf("Parent : %d  | Child : %d PIDERROR DELETE!\n",thread_current()->tid,tid);
+    
   palloc_free_page(fn_copy);
   palloc_free_page(program);
   palloc_free_page(tcb);
@@ -134,6 +140,7 @@ start_process (void *ptr)
         stack_size += strlen((const char*)token[argc-1-i])+1;
         memcpy(*esp, (void *)token[argc-1-i], strlen((const char*)token[argc-1-i])+1);
       }
+      palloc_free_page(token);
       // push argv[0]
     }
     *esp -= strlen(thread_current()->name)+1; 
@@ -148,7 +155,7 @@ start_process (void *ptr)
      //now at 4byte aligning
     *(unsigned int*)*esp = (unsigned int)NULL;
     int argc=0;
-    for(cnt = 0 ; cnt<=stack_size-1 ; cnt++) // make argv split, and push argv's addr
+    for(cnt = 0 ; cnt <= stack_size-1 ; cnt++) // make argv split, and push argv's addr
     {
       if((*(argv_ptr-cnt) == '\0' || *(argv_ptr-cnt)== ' ') &&
          (*(argv_ptr-cnt+1) != '\0' || *(argv_ptr-cnt+1)!= ' '))
@@ -167,9 +174,7 @@ start_process (void *ptr)
   }
   sema_up(&(tcb->sema));
 
-
-  
-  /* If load failed, quit. */
+  /*If load failed, quit.*/
   if (!success) 
   {
     sys_exit(-1,NULL);
@@ -180,17 +185,20 @@ start_process (void *ptr)
      arguments on the stack in the form of a `struct intr_frame',
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
+
+  //struct thread * t = thread_current();
+  //printf("Parent : %d  | child: %d CREATED!\n",t->tcb->parent->tid,t->tid);
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
 
 /* Waits for thread TID to die and returns its exit status.  If
    it was terminated by the kernel (i.e. killed due to an
-   exception), returns -1.  If TID is invalid or if it was not a
+   exception), returns -1.  If TID is == tidinvalid or if it was not a
    child of the calling process, or if process_wait() has already
-   been successfully called for the given TID, returns -1
-   immediately, without waiting.
-
+   been successfully called for the gi== tidven TID, returns -1
+   immediately, without waiting.== tid
+== tid
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
@@ -232,9 +240,7 @@ process_wait (tid_t child_tid)
   }
   else
     tcb->wait = true;
-  if(tcb->exit == false)
-    sema_down(&(tcb->wait_sema));
-
+  sema_down(&(tcb->wait_sema));
   /* now child process has been exited */
   list_remove(tmp);
   exit_code = tcb->exit_code;
@@ -249,36 +255,35 @@ process_exit (void)
   struct thread *cur = thread_current ();
   struct tcb * tcb;
   struct filedescriptor *fd;
-  struct list_elem *elem_;
   uint32_t *pd;
-  
-  //printf("%s is in process_exit!\n",thread_current()->name);
-  /* remove all list child_tcb and determine whether child process is dead or not */
-  if(!list_empty(&cur->child_tcb))
+
+  struct list *list = &cur->child_tcb;
+  //printf("Size of alllist : %d  ",list_size(&all_list));
+  //printf("Parent %d, %d | ",cur->tcb->parent->tid,list_size(&cur->tcb->parent->child_tcb));
+  //printf("Child %d, list of tcb : %d, exit code : %d",cur->tid,list_size(list), cur->tcb->exit_code);
+  for(;!list_empty(list);)
   {
-    for(elem_ = list_front(&cur->child_tcb); ; elem_ = list_next(elem_))
+    struct list_elem *elem = list_pop_front (list) ;
+    tcb = list_entry(elem, struct tcb, elem);
+    if(tcb->exit == true)
     {
-      tcb = list_entry(elem_, struct tcb, elem);
-      if(tcb->exit == true) // child process has been exited.
-        palloc_free_page(tcb);
-      else // orphan
-      {
-        tcb->parent = NULL; // have no parent
-        tcb->goa = true;
-      }
+      palloc_free_page(tcb);
     }
-  } 
-  if(!list_empty(&cur->fd))
+    else
+    {
+      tcb->goa=true;
+      tcb->parent=NULL;
+    } 
+  }
+  //printf(", flag orphan : %d\n",cur->tcb->goa);
+  struct list *list_ = &cur->fd;
+  for(;!list_empty(list_);)
   {
-    struct list *list = &cur->fd;
-    for(;!list_empty(list);)
-    {
-      struct list_elem *elem = list_pop_front (list);
-      fd = list_entry(elem, struct filedescriptor, elem);
-      file_close(fd->f);
-      palloc_free_page(fd); 
-    }
-  } 
+    struct list_elem *elem = list_pop_front (list_);
+    fd = list_entry(elem, struct filedescriptor, elem);
+    file_close(fd->f);
+    palloc_free_page(fd); 
+  }
   if(cur->current_file)
   {
     file_allow_write(cur->current_file);

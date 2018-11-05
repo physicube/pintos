@@ -132,6 +132,7 @@ main (int argc, char *argv[])
       if (n > EXPECTED_DEPTH_TO_PASS/2)
         {
           child_pid = spawn_child (n + 1, CRASH);
+          //msg("Abnormal child spawn! pid : %d",child_pid);
           if (child_pid != -1)
             {
               if (wait (child_pid) != -1)
@@ -143,7 +144,7 @@ main (int argc, char *argv[])
 
       /* Now spawn the child that will recurse. */
       child_pid = spawn_child (n + 1, RECURSE);
-
+      //msg("Abnormal child spawn! pid : %d",child_pid);
       /* If maximum depth is reached, return result. */
       if (child_pid == -1)
         return n;

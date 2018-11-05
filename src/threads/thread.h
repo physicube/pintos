@@ -97,7 +97,7 @@ struct tcb
   struct semaphore sema;
   struct semaphore wait_sema;
 };
-
+struct list all_list;
 struct filedescriptor
 {
   int fd_num;

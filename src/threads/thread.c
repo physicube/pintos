@@ -26,7 +26,7 @@ static struct list ready_list;
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
-static struct list all_list;
+//static struct list all_list;
 
 /* Idle thread. */
 static struct thread *idle_thread;
@@ -478,7 +478,6 @@ init_thread (struct thread *t, const char *name, int priority)
   cond_init(&t->child_cond);
   sema_init(&t->sema, 0);
   #endif
-
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
@@ -597,4 +596,3 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
-
