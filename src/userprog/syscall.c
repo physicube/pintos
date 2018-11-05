@@ -109,11 +109,11 @@ void read_mem(void *f, unsigned char *esp, int num)
   int i;
   for(i=0; i<num; i++)
   {
-   // printf("check : %p, size : %d\n",esp+i,num);
+    //printf("check : %p, size : %d\n",esp+i,num);
     if(check_validate(esp + i))
       *(char *)(f+i) = read_phys_mem((esp + i)) & 0xff;
     else
-          sys_exit(-1,NULL);
+      sys_exit(-1,NULL);
   }
 }
 
@@ -121,9 +121,9 @@ static void
 syscall_handler (struct intr_frame *f) 
 {
   int syscall_number;
+
   void *esp = f->esp;
-  
-  if(!check_validate(esp) || !check_validate(esp+4) || ! check_validate(esp+8) || !check_validate(esp+12))
+  if(!check_validate(esp) && !check_validate(esp+4) && ! check_validate(esp+8) && !check_validate(esp+12))
   {
     sys_exit(-1,NULL);
   }
@@ -204,7 +204,7 @@ syscall_handler (struct intr_frame *f)
       read_mem(&fd,esp+4,sizeof(fd));
       read_mem(&buffer, esp+8, sizeof(buffer));
       read_mem(&size, esp+12, sizeof(size));
-      sys_write(fd,buffer,size,f);    
+      sys_write(fd,buffer,size,f);
       break;
     }
     case SYS_SEEK: // 10

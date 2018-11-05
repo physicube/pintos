@@ -292,7 +292,7 @@ process_exit (void)
   /*and remove itself if cur thread is orphan */
   if(cur->tcb->goa == true)
   {
-    palloc_free_page( &cur->tcb);
+    palloc_free_page(cur->tcb);
   }
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
