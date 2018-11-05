@@ -125,9 +125,6 @@ struct thread
     struct tcb *tcb;
     struct list child_tcb;
     struct list fd;
-    struct lock child_lock;
-    struct condition child_cond;
-    struct semaphore sema;
     struct file *current_file;
 #endif
 

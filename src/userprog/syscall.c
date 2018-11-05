@@ -93,7 +93,6 @@ bool check_validate(void *addr)
   {
     if((pagedir_get_page(thread_current()->pagedir, addr)) != NULL)
     {
-      //printf("Check! %p\n",addr);
       return true;
     }
     else
@@ -109,7 +108,6 @@ void read_mem(void *f, unsigned char *esp, int num)
   int i;
   for(i=0; i<num; i++)
   {
-    //printf("check : %p, size : %d\n",esp+i,num);
     if(check_validate(esp + i))
       *(char *)(f+i) = read_phys_mem((esp + i)) & 0xff;
     else
@@ -128,36 +126,35 @@ syscall_handler (struct intr_frame *f)
     sys_exit(-1,NULL);
   }
   read_mem(&syscall_number, esp, sizeof(syscall_number));
-  //printf("syscall num : %d\n",syscall_number);
   switch(syscall_number)
   {
-    case SYS_HALT: // 0
+    case SYS_HALT: 
     {
       shutdown_power_off();
       break;
     }
-    case SYS_EXIT: // 1
+    case SYS_EXIT: 
     { 
       int exit_code;
       read_mem(&exit_code, esp+4, sizeof(exit_code));
       sys_exit(exit_code,f);
       break;
     }
-    case SYS_EXEC: // 2
+    case SYS_EXEC: 
     { 
       void * cmd;
       read_mem(&cmd, esp+4, sizeof(cmd));
       sys_exec(cmd,f);
       break;
     }
-    case SYS_WAIT: // 3
+    case SYS_WAIT:
     { 
       int tid;
       read_mem(&tid,esp+4,sizeof(tid));
       sys_wait(tid,f);
       break;
     }
-    case SYS_CREATE: // 4
+    case SYS_CREATE: 
     {
       char * name;
       size_t size;
@@ -166,28 +163,28 @@ syscall_handler (struct intr_frame *f)
       sys_create(name,size,f);
       break;
     }
-    case SYS_REMOVE: // 5
+    case SYS_REMOVE: 
     {
       char * name;
       read_mem(&name,esp+4,sizeof(name));
       sys_remove(name,f);
       break;
     }
-    case SYS_OPEN: // 6
+    case SYS_OPEN: 
     {
       char *name;
       read_mem(&name, esp+4, sizeof(name));
       sys_open(name,f);
       break;
     }
-    case SYS_FILESIZE: // 7
+    case SYS_FILESIZE: 
     {
       int fd;
       read_mem(&fd,esp+4,sizeof(fd));
       sys_filesize(fd,f);
       break;
     }
-    case SYS_READ: // 8
+    case SYS_READ:
     {
       int fd, size;
       void *buffer;
@@ -197,7 +194,7 @@ syscall_handler (struct intr_frame *f)
       sys_read(fd,buffer,size,f);
       break;
     }
-    case SYS_WRITE: // 9
+    case SYS_WRITE: 
     { 
       int fd, size;
       void *buffer;
@@ -207,7 +204,7 @@ syscall_handler (struct intr_frame *f)
       sys_write(fd,buffer,size,f);
       break;
     }
-    case SYS_SEEK: // 10
+    case SYS_SEEK: 
     {
       int fd, cnt;
       read_mem(&fd,esp+4,sizeof(fd));
@@ -215,14 +212,14 @@ syscall_handler (struct intr_frame *f)
       sys_seek(fd, cnt, f);
       break;
     }
-    case SYS_TELL: // 11
+    case SYS_TELL: 
     {
       int fd;
       read_mem(&fd,esp+4,sizeof(fd));
       sys_tell(fd,f);
       break;
     }
-    case SYS_CLOSE: // 12
+    case SYS_CLOSE: 
     {
       int fd;
       read_mem(&fd, esp+4, sizeof(fd));
@@ -243,8 +240,7 @@ sys_exit(int exit_code, struct intr_frame *f UNUSED)
 {
   struct tcb * tcb = thread_current()->tcb;
   printf("%s: exit(%d)\n", thread_current()->name, exit_code);
-  if(tcb)
-    tcb->exit_code = exit_code;
+  if(tcb) tcb->exit_code = exit_code;
   thread_exit();
 }
 
@@ -275,14 +271,12 @@ sys_create(char *name, size_t size, struct intr_frame *f)
 void 
 sys_write(int fd_, void * buffer, int size, struct intr_frame *f)
 {
-  ///printf("name : %s, buffer: %s, !!! fd: %d, size : %d\n",thread_current()->name,(char *)buffer,fd_,size);
   if(buffer == NULL)
     sys_exit(-1,NULL);
   check_memory_byte_by_byte(buffer,sizeof(buffer));
   if(!check_validate(buffer) || !check_validate(buffer+size))
-  {
     sys_exit(-1,NULL);
-  }
+  
   lock_acquire(&memory_lock);
   if(fd_ == STDOUT)
   {
@@ -317,9 +311,7 @@ sys_write(int fd_, void * buffer, int size, struct intr_frame *f)
     }
     if(fd !=NULL)
     {
-      //printf("file addr : %x, ready to write file!\n",(unsigned int)fd->f)
-        f->eax = file_write(fd->f,buffer,size);
-      //printf("Return value of file_write : %d\n",f->eax);
+      f->eax = file_write(fd->f,buffer,size);
       lock_release(&memory_lock);
       return;
     }
@@ -356,7 +348,6 @@ sys_open(char * name, struct intr_frame *f)
     fd->master = thread_current();
     list_push_back(&(thread_current()->fd),&(fd->elem));
     f->eax=fd->fd_num;
-    //printf("thread : %s, opened : %s with fd : %d\n\n",thread_current()->name,name,fd->fd_num);
     lock_release(&memory_lock);
     return;
   }
@@ -472,7 +463,6 @@ sys_filesize(int fd_, struct intr_frame *f)
   else 
   {
     f->eax = file_length(fd->f);
-    //printf("%s called fd:%d size!\n",thread_current()->name,fd_);  
   }
 }
 

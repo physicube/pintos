@@ -61,13 +61,12 @@ process_execute (const char *file_name)
   tcb->me = NULL;
   tcb->goa = false;
   tcb->parent = thread_current();
-  //lock_release(&thread_current()->child_lock);
+  
   tid = thread_create (program, PRI_DEFAULT, start_process, tcb);
   sema_down(&tcb->sema); //wait until load and push argv to stack
-  //lock_acquire(&thread_current()->child_lock);
-  if(tcb->tid > 0)
+  
+  if(tcb->tid == tid)
   {
-    //printf("Parent : %d  | Child : %d LISTPUSHBACK!\n",thread_current()->tid,tid);
     list_push_back(&thread_current()->child_tcb, &tcb->elem);
   }
   else
@@ -79,12 +78,9 @@ process_execute (const char *file_name)
     palloc_free_page(fn_copy);
     palloc_free_page(program);
   }
-  //lock_release(&thread_current()->child_lock);
   return tid;
   
-  end:
-  //printf("Parent : %d  | Child : %d PIDERROR DELETE!\n",thread_current()->tid,tid);
-    
+  end:    
   palloc_free_page(fn_copy);
   palloc_free_page(program);
   palloc_free_page(tcb);
@@ -140,19 +136,14 @@ start_process (void *ptr)
         stack_size += strlen((const char*)token[argc-1-i])+1;
         memcpy(*esp, (void *)token[argc-1-i], strlen((const char*)token[argc-1-i])+1);
       }
-      palloc_free_page(token);
-      // push argv[0]
+      palloc_free_page(token); // 이거 못찾아서 vm 통과 못했...
     }
     *esp -= strlen(thread_current()->name)+1; 
     stack_size += strlen(thread_current()->name) +1;
     memcpy(*esp, thread_current()->name, strlen(thread_current()->name)+1);
     argv_ptr = PHYS_BASE-2;
-    //printf("ARGV[0] is at %p : %x\n",argv_ptr, *argv_ptr);
-    //need to modify esp for alignment :: 4byte alignment is need
     *esp -= 4 - stack_size % 4;
-     //push NULLBYTE below argv[0]
     *esp -= 4;
-     //now at 4byte aligning
     *(unsigned int*)*esp = (unsigned int)NULL;
     int argc=0;
     for(cnt = 0 ; cnt <= stack_size-1 ; cnt++) // make argv split, and push argv's addr
@@ -186,8 +177,6 @@ start_process (void *ptr)
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
 
-  //struct thread * t = thread_current();
-  //printf("Parent : %d  | child: %d CREATED!\n",t->tcb->parent->tid,t->tid);
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
@@ -209,7 +198,6 @@ process_wait (tid_t child_tid)
   struct list_elem *tmp=NULL;
   int exit_code;
   /* first, find child tcb*/
-  //printf("thread :%s is in wait!\n\n\n\n",curr->name);
   if(!list_empty(&curr->child_tcb))
   {
     for(tmp = list_front(&curr->child_tcb); ; tmp = list_next(tmp))
@@ -240,7 +228,7 @@ process_wait (tid_t child_tid)
   }
   else
     tcb->wait = true;
-  sema_down(&(tcb->wait_sema));
+  sema_down(&(tcb->wait_sema)); //wait parent process in process_wait
   /* now child process has been exited */
   list_remove(tmp);
   exit_code = tcb->exit_code;
@@ -258,9 +246,6 @@ process_exit (void)
   uint32_t *pd;
 
   struct list *list = &cur->child_tcb;
-  //printf("Size of alllist : %d  ",list_size(&all_list));
-  //printf("Parent %d, %d | ",cur->tcb->parent->tid,list_size(&cur->tcb->parent->child_tcb));
-  //printf("Child %d, list of tcb : %d, exit code : %d",cur->tid,list_size(list), cur->tcb->exit_code);
   for(;!list_empty(list);)
   {
     struct list_elem *elem = list_pop_front (list) ;
@@ -275,7 +260,6 @@ process_exit (void)
       tcb->parent=NULL;
     } 
   }
-  //printf(", flag orphan : %d\n",cur->tcb->goa);
   struct list *list_ = &cur->fd;
   for(;!list_empty(list_);)
   {
