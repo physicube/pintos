@@ -29,7 +29,7 @@ static bool load (char *cmdline, void (**eip) (void), void **esp);
 tid_t
 process_execute (char *file_name) 
 {
-  char *fn_copy;
+  char *fn_copy, *tmp, *argv0;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
@@ -38,13 +38,24 @@ process_execute (char *file_name)
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
-  char *tmp, *argv0 = strtok_r(file_name, " ", &tmp); 
+  argv0 = strtok_r(file_name, " ", &tmp); 
   
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (argv0, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy);
-   
+  else
+  {
+    struct thread *child = tid_to_thread(tid);
+    struct child_thread *ct  = malloc(sizeof(struct child_thread));
+    struct thread *parent = thread_current();
+    
+    ct->child = child;
+    list_push_back(&parent->child_threads, &ct->elem);
+    child->parent = parent;
+    sema_down(&child->sema_exec);
+  }
+
   return tid;
 }
 
@@ -56,7 +67,6 @@ start_process (void *file_name_)
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
-
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -69,14 +79,9 @@ start_process (void *file_name_)
   struct thread *child = thread_current();
 
   /* for exec syscall */
-  lock_acquire(&child->syscall_lock);
-
-  child->load_success = true;
-  cond_signal(&child->syscall_condvar, &child->syscall_lock);
-
-  lock_release(&child->syscall_lock);
+  sema_up(&child->sema_exec);
   
-  if (!success) 
+  if (!success)
     thread_exit ();
 
   /* Start the user process by simulating a return from an
@@ -103,6 +108,7 @@ process_wait (tid_t child_tid)
 {
   struct thread *parent = thread_current();
   struct thread *child = tid_to_thread(child_tid);
+  int status = -1;
 
   if (child == NULL)
     return -1;
@@ -120,15 +126,12 @@ process_wait (tid_t child_tid)
     }
   if (!(is_child && !child->wait_called))
     return -1;
-  
-  lock_acquire(&child->syscall_lock);
-  while(child->status != THREAD_DYING)
-    cond_wait(&child->syscall_condvar, &child->syscall_lock);
-  lock_release(&child->syscall_lock);
-  
   child->wait_called = true;
+  sema_down(&child->sema_wait);
+  status = child->exit_status;
+  sema_up(&child->sema_zombie);
 
-  return child->exit_status;
+  return status;
 }
 
 /* Free the current process's resources. */
@@ -137,7 +140,11 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
-
+  sema_up(&cur->sema_wait);
+  if (cur->wait_called)
+  {
+    sema_down(&cur->sema_zombie);
+  }
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;

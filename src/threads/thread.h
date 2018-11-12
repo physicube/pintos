@@ -97,12 +97,12 @@ struct thread
     /* for user process */
     struct list child_threads;
     struct thread *parent;
-    bool load_success;
     bool wait_called;
     int exit_status;
 
-    struct lock syscall_lock;
-    struct condition syscall_condvar;
+    struct semaphore sema_exec;
+    struct semaphore sema_wait;
+    struct semaphore sema_zombie;
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
