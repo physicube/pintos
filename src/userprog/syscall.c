@@ -291,6 +291,13 @@ sys_write(int fd_, void * buffer, int size, struct intr_frame *f)
     lock_release(&memory_lock);
     return;
   }
+  else if( !fd_validate(fd_) || fd_ < 0)
+  {
+     
+    f->eax=-1;
+    lock_release(&memory_lock);
+    return;
+  }
   else
   {
     struct list_elem *tmp;
@@ -417,7 +424,6 @@ sys_read(int fd_, void * buffer, int size, struct intr_frame *f)
   }
   else
   {
-  
     struct list_elem *tmp;
     struct filedescriptor *fd;
     if(!list_empty(&thread_current()->fd))
