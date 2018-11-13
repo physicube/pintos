@@ -475,7 +475,6 @@ init_thread (struct thread *t, const char *name, int priority)
   
   #ifdef USERPROG
   t->tcb=NULL;
-  t->fd_max = 3;
   t->current_file=NULL;
   list_init(&t->child_tcb);
   list_init(&t->fd);

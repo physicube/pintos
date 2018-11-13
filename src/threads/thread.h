@@ -124,7 +124,6 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
     struct tcb *tcb;
     struct list child_tcb;
-    unsigned fd_max;
     struct list fd;
     struct file *current_file;
 #endif
