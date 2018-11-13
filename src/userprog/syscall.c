@@ -327,11 +327,13 @@ sys_write(int fd_, void * buffer, int size, struct intr_frame *f)
 void
 sys_open(char * name, struct intr_frame *f)
 {
-  
+   
   struct file * open=NULL;
   struct filedescriptor * fd;
+  
   check_memory_byte_by_byte(name,sizeof(name));
   lock_acquire(&memory_lock);
+  
   fd = palloc_get_page(0);
   if(fd == NULL)
   {
@@ -344,7 +346,8 @@ sys_open(char * name, struct intr_frame *f)
     if(open == NULL)
       goto malicious_ending;
     fd->f = open;  
-    fd->fd_num = ++fd_num;
+    fd->fd_num = thread_get_fd_max();
+    //printf("new fd : %d\n",fd->fd_num);
     fd->master = thread_current();
     list_push_back(&(thread_current()->fd),&(fd->elem));
     f->eax=fd->fd_num;
@@ -378,6 +381,7 @@ sys_close(int fd_, struct intr_frame *f UNUSED)
       if(thread_current()->tid == fd->master->tid) // check master thread.
       {
         lock_release(&memory_lock);
+        thread_current()->fd_max = thread_lose_fd_max();
         file_close(fd->f);
         list_remove(&(fd->elem));
         palloc_free_page(fd);
@@ -392,13 +396,7 @@ sys_read(int fd_, void * buffer, int size, struct intr_frame *f)
   check_memory_byte_by_byte(buffer,sizeof(buffer));
   check_memory_byte_by_byte(buffer,sizeof(buffer)+size-1);
   lock_acquire(&memory_lock);
-  if(fd_ <= 2 || fd_ > fd_num)
-  {
-    f->eax=-1;
-    lock_release(&memory_lock);
-    return;
-  }
-  if(fd_==STDIN) 
+  if(fd_ == STDIN) 
   {
     for(i=0; i<(unsigned)size; i++)
       write_mem((unsigned char *)(buffer+i),input_getc());
@@ -406,6 +404,12 @@ sys_read(int fd_, void * buffer, int size, struct intr_frame *f)
     f->eax = size;
   }
   else if(fd_ == STDOUT)
+  {
+    f->eax=-1;
+    lock_release(&memory_lock);
+    return;
+  }
+  else if(fd_ > thread_current()->fd_max || fd_ < 0)
   {
     f->eax=-1;
     lock_release(&memory_lock);
@@ -428,7 +432,7 @@ sys_read(int fd_, void * buffer, int size, struct intr_frame *f)
           f->eax=-1;
           return;
         }
-      }
+       }
       f->eax = file_read(fd->f,buffer,size);
       lock_release(&memory_lock);
       return ;

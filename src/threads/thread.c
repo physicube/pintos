@@ -36,6 +36,7 @@ static struct thread *initial_thread;
 
 /* Lock used by allocate_tid(). */
 static struct lock tid_lock;
+static struct lock fd_lock;
 
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
@@ -90,6 +91,7 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
+  lock_init(&fd_lock);
   list_init (&ready_list);
   list_init (&all_list);
 
@@ -471,6 +473,7 @@ init_thread (struct thread *t, const char *name, int priority)
   
   #ifdef USERPROG
   t->tcb=NULL;
+  t->fd_max = 3;
   t->current_file=NULL;
   list_init(&t->child_tcb);
   list_init(&t->fd);
@@ -580,6 +583,7 @@ schedule (void)
 static tid_t
 allocate_tid (void) 
 {
+  
   static tid_t next_tid = 1;
   tid_t tid;
 
@@ -588,6 +592,31 @@ allocate_tid (void)
   lock_release (&tid_lock);
 
   return tid;
+}
+
+unsigned thread_get_fd_max(void)
+{
+  struct thread * t = thread_current();
+  if(t->fd_max == 3)
+  {
+    tid_t fd;
+    fd = 3;
+    t->fd_max++;
+    return fd;
+  }  
+  else
+    t->fd_max += 1;
+  return t->fd_max;
+}
+
+int thread_lose_fd_max(void)
+{
+  struct thread * t = thread_current();
+  if(t->fd_max == 3)
+    t->fd_max = 3;
+  else
+    t->fd_max -=1;
+  return t->fd_max;
 }
 
 /* Offset of `stack' member within `struct thread'.

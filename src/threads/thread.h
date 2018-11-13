@@ -124,6 +124,7 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
     struct tcb *tcb;
     struct list child_tcb;
+    unsigned fd_max;
     struct list fd;
     struct file *current_file;
 #endif
@@ -167,4 +168,6 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+unsigned thread_get_fd_max(void);
+int thread_lose_fd_max(void);
 #endif /* threads/thread.h */
