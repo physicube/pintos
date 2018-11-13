@@ -192,6 +192,7 @@ syscall_handler (struct intr_frame *f)
       read_mem(&buffer, esp+8, sizeof(fd));
       read_mem(&size, esp+12, sizeof(fd));
       sys_read(fd,buffer,size,f);
+      
       break;
     }
     case SYS_WRITE: 
@@ -327,7 +328,6 @@ sys_write(int fd_, void * buffer, int size, struct intr_frame *f)
 void
 sys_open(char * name, struct intr_frame *f)
 {
-   
   struct file * open=NULL;
   struct filedescriptor * fd;
   
@@ -347,7 +347,6 @@ sys_open(char * name, struct intr_frame *f)
       goto malicious_ending;
     fd->f = open;  
     fd->fd_num = thread_get_fd_max();
-    //printf("new fd : %d\n",fd->fd_num);
     fd->master = thread_current();
     list_push_back(&(thread_current()->fd),&(fd->elem));
     f->eax=fd->fd_num;
@@ -381,7 +380,6 @@ sys_close(int fd_, struct intr_frame *f UNUSED)
       if(thread_current()->tid == fd->master->tid) // check master thread.
       {
         lock_release(&memory_lock);
-        thread_current()->fd_max = thread_lose_fd_max();
         file_close(fd->f);
         list_remove(&(fd->elem));
         palloc_free_page(fd);
@@ -396,6 +394,7 @@ sys_read(int fd_, void * buffer, int size, struct intr_frame *f)
   check_memory_byte_by_byte(buffer,sizeof(buffer));
   check_memory_byte_by_byte(buffer,sizeof(buffer)+size-1);
   lock_acquire(&memory_lock);
+  //printf("PASSED!\n");
   if(fd_ == STDIN) 
   {
     for(i=0; i<(unsigned)size; i++)
@@ -409,14 +408,16 @@ sys_read(int fd_, void * buffer, int size, struct intr_frame *f)
     lock_release(&memory_lock);
     return;
   }
-  else if(fd_ > thread_current()->fd_max || fd_ < 0)
+  else if( !fd_validate(fd_) || fd_ < 0)
   {
+     
     f->eax=-1;
     lock_release(&memory_lock);
     return;
   }
   else
   {
+  
     struct list_elem *tmp;
     struct filedescriptor *fd;
     if(!list_empty(&thread_current()->fd))

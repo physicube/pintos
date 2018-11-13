@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -45,6 +46,7 @@ struct kernel_thread_frame
     thread_func *function;      /* Function to call. */
     void *aux;                  /* Auxiliary data for function. */
   };
+
 
 /* Statistics. */
 static long long idle_ticks;    /* # of timer ticks spent idle. */
@@ -596,29 +598,79 @@ allocate_tid (void)
 
 unsigned thread_get_fd_max(void)
 {
-  struct thread * t = thread_current();
-  if(t->fd_max == 3)
+  struct list_elem *tmp;
+  struct filedescriptor *fd=NULL;
+  int lize = list_size(&thread_current()->fd);
+  //printf("list size : %d\n",lize);
+  int tmp_=0;
+  int i,loop;
+  int prev=0; 
+  if(!list_empty(&thread_current()->fd))
   {
-    tid_t fd;
-    fd = 3;
-    t->fd_max++;
-    return fd;
-  }  
+    int *fd_num_tmp = (int *)calloc(1,sizeof(int)*lize);
+    for(tmp = list_front(&thread_current()->fd); tmp_<lize; tmp=list_next(tmp), tmp_++)
+    {
+      fd = list_entry(tmp, struct filedescriptor, elem);
+      fd_num_tmp[tmp_] = fd->fd_num;
+      //printf("list : %d\n",fd_num_tmp[tmp_]);
+    }
+    for (loop = 0; loop < lize - 1; loop++) 
+    {
+      for (i = 0; i < lize - 1 - loop; i++) 
+      {
+        if (fd_num_tmp[i] > fd_num_tmp[i+1]) 
+        {
+          prev = fd_num_tmp[i];
+          fd_num_tmp[i] = fd_num_tmp[i+1];
+          fd_num_tmp[i+1] = prev;
+        }
+      }
+    }
+    for(loop = 0; loop < lize-1; loop++)
+    {
+      if((fd_num_tmp[loop+1] - fd_num_tmp[loop]) != 1)
+      {
+        int l = fd_num_tmp[loop]+1;
+        free(fd_num_tmp);
+        return l;
+      }
+    }
+    int l = fd_num_tmp[lize-1]+1;
+    free(fd_num_tmp);
+    return l;
+  }
   else
-    t->fd_max += 1;
-  return t->fd_max;
+    return 3;
 }
 
-int thread_lose_fd_max(void)
+bool fd_validate(int fd_)
 {
-  struct thread * t = thread_current();
-  if(t->fd_max == 3)
-    t->fd_max = 3;
+  struct list_elem *tmp;
+  struct filedescriptor *fd=NULL;
+  int lize = list_size(&thread_current()->fd);
+  tid_t fd_num = 2;
+  int tmp_=0;
+  bool flag=false;
+  if(!list_empty(&thread_current()->fd))
+  {
+    for(tmp = list_front(&thread_current()->fd); tmp_ < lize; tmp=list_next(tmp), tmp_++)
+    {
+      fd = list_entry(tmp, struct filedescriptor, elem);
+      if(fd_ == fd->fd_num)
+      {
+        flag = true;
+      }
+    }
+    return flag;
+  }
   else
-    t->fd_max -=1;
-  return t->fd_max;
+  {
+    if(fd_ == 3)
+      return true;
+    else 
+      return false;
+  }
 }
-
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);

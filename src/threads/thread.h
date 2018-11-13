@@ -169,5 +169,5 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 unsigned thread_get_fd_max(void);
-int thread_lose_fd_max(void);
+bool fd_validate(int fd_);
 #endif /* threads/thread.h */
