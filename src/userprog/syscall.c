@@ -37,9 +37,8 @@ void sys_filesize(int , struct intr_frame*);
 void sys_remove(char *, struct intr_frame*);
 void sys_seek(int, int, struct intr_frame * UNUSED);
 void sys_tell(int , struct intr_frame *f);
+static struct filedescriptor * find_fd(int fd_);
 
-
-static int fd_num=2;
 void
 syscall_init (void) 
 {
@@ -49,15 +48,10 @@ syscall_init (void)
 
 void check_memory_byte_by_byte(void * addr, size_t size)
 {
-  unsigned i;
   unsigned char *_cmd = addr;
-  for(i=0; i<size; i++)
-  {
-    if(!check_validate((void *)(_cmd+i)))
-    {
-      sys_exit(-1,NULL);
-    }
-  }
+  for(unsigned i = 0; i < size; i++)
+    if(!check_validate((void *)(_cmd + i)))
+      sys_exit(-1, NULL);
 }
 
 int read_phys_mem(unsigned char *addr)
@@ -85,31 +79,27 @@ bool write_mem(unsigned char *addr, unsigned char byte)
   }
   else
     sys_exit(-1,NULL);
+    return false;
 }
 
 bool check_validate(void *addr)
 {
   if((addr != NULL) && (((unsigned int)addr) < ((unsigned int)PHYS_BASE)))
   {
-    if((pagedir_get_page(thread_current()->pagedir, addr)) != NULL)
-    {
+    if(pagedir_get_page(thread_current()->pagedir, addr) != NULL)
       return true;
-    }
     else
-    {
       return false;
-    }
   }
   return false;
 }
 
 void read_mem(void *f, unsigned char *esp, int num)
 {
-  int i;
-  for(i=0; i<num; i++)
+  for(int i = 0; i < num; i++)
   {
     if(check_validate(esp + i))
-      *(char *)(f+i) = read_phys_mem((esp + i)) & 0xff;
+      *(char *)(f + i) = read_phys_mem(esp + i) & 0xff;
     else
       sys_exit(-1,NULL);
   }
@@ -122,9 +112,8 @@ syscall_handler (struct intr_frame *f)
 
   void *esp = f->esp;
   if(!check_validate(esp) && !check_validate(esp+4) && ! check_validate(esp+8) && !check_validate(esp+12))
-  {
     sys_exit(-1,NULL);
-  }
+
   read_mem(&syscall_number, esp, sizeof(syscall_number));
   switch(syscall_number)
   {
@@ -239,8 +228,9 @@ syscall_handler (struct intr_frame *f)
 void
 sys_exit(int exit_code, struct intr_frame *f UNUSED)
 {
-  struct tcb * tcb = thread_current()->tcb;
-  printf("%s: exit(%d)\n", thread_current()->name, exit_code);
+  struct thread *t = thread_current();
+  struct tcb * tcb = t->tcb;
+  printf("%s: exit(%d)\n", t->name, exit_code);
   if(tcb) tcb->exit_code = exit_code;
   thread_exit();
 }
@@ -265,7 +255,7 @@ sys_create(char *name, size_t size, struct intr_frame *f)
 {
   check_memory_byte_by_byte(name,sizeof(name));
   lock_acquire(&memory_lock);
-  f->eax = filesys_create((const char*)name,size);
+  f->eax = filesys_create((const char*)name, size);
   lock_release(&memory_lock);
 }
 
@@ -274,7 +264,7 @@ sys_write(int fd_, void * buffer, int size, struct intr_frame *f)
 {
   if(buffer == NULL)
     sys_exit(-1,NULL);
-  check_memory_byte_by_byte(buffer,sizeof(buffer));
+  check_memory_byte_by_byte(buffer, sizeof(buffer));
   if(!check_validate(buffer) || !check_validate(buffer+size))
     sys_exit(-1,NULL);
   
@@ -283,45 +273,32 @@ sys_write(int fd_, void * buffer, int size, struct intr_frame *f)
   {
     putbuf(buffer, size);
     lock_release(&memory_lock);
-    f->eax=size;
+    f->eax = size;
   }
   else if(fd_ == STDIN)
   {
-    f->eax=-1;
+    f->eax = -1;
     lock_release(&memory_lock);
     return;
   }
   else if( !fd_validate(fd_) || fd_ < 0)
-  {
-     
-    f->eax=-1;
+  {  
+    f->eax = -1;
     lock_release(&memory_lock);
     return;
   }
   else
   {
-    struct list_elem *tmp;
-    struct filedescriptor * fd=NULL;
-    if(!list_empty(&thread_current()->fd))
+    struct filedescriptor * fd = find_fd(fd_);
+
+    if(fd != NULL)
     {
-      for(tmp=list_front(&thread_current()->fd); ; tmp=list_next(tmp))
+      if (fd->f != NULL)
       {
-        fd = list_entry(tmp, struct filedescriptor, elem);
-        if(fd->fd_num == fd_)
-         break;
-        if(tmp == list_tail(&thread_current()->fd) && (fd->fd_num != fd_))
-        {
-          lock_release(&memory_lock);
-          f->eax=-1;
-          return;
-        }
+        f->eax = file_write(fd->f, buffer, size);
+        lock_release(&memory_lock);
+        return;
       }
-    }
-    if(fd !=NULL)
-    {
-      f->eax = file_write(fd->f,buffer,size);
-      lock_release(&memory_lock);
-      return;
     }
     else
     {
@@ -335,8 +312,9 @@ sys_write(int fd_, void * buffer, int size, struct intr_frame *f)
 void
 sys_open(char * name, struct intr_frame *f)
 {
-  struct file * open=NULL;
+  struct file * open = NULL;
   struct filedescriptor * fd;
+  struct thread *t = thread_current();
   
   check_memory_byte_by_byte(name,sizeof(name));
   lock_acquire(&memory_lock);
@@ -354,127 +332,94 @@ sys_open(char * name, struct intr_frame *f)
       goto malicious_ending;
     fd->f = open;  
     fd->fd_num = thread_get_fd_max();
-    fd->master = thread_current();
-    list_push_back(&(thread_current()->fd),&(fd->elem));
-    f->eax=fd->fd_num;
+    fd->master = t;
+    list_push_back(&t->fd, &fd->elem);
+
+    f->eax = fd->fd_num;
     lock_release(&memory_lock);
     return;
   }
   malicious_ending:
-  f->eax=-1;
+  f->eax = -1;
   lock_release(&memory_lock);
 }
 
 void
 sys_close(int fd_, struct intr_frame *f UNUSED)
-{
-    struct list_elem *tmp;
-    struct filedescriptor *fd;
-    if(!list_empty(&thread_current()->fd))
+{  
+  struct thread *t = thread_current();
+
+  if(!list_empty(&t->fd))
+  {
+    lock_acquire(&memory_lock);
+    struct filedescriptor *fd = find_fd(fd_);;
+    if (fd == NULL)
+      return;
+    if(t->tid == fd->master->tid) // check master thread.
     {
-      lock_acquire(&memory_lock);
-      for(tmp=list_front(&thread_current()->fd); ; tmp=list_next(tmp))
-      {
-        fd = list_entry(tmp, struct filedescriptor, elem);
-        if(fd->fd_num == fd_)
-         break;
-        if(tmp == list_tail(&thread_current()->fd) && (fd->fd_num != fd_))
-        {
-          lock_release(&memory_lock);
-          return;
-        }
-      }
-      if(thread_current()->tid == fd->master->tid) // check master thread.
-      {
-        lock_release(&memory_lock);
-        file_close(fd->f);
-        list_remove(&(fd->elem));
-        palloc_free_page(fd);
-      }
+      file_close(fd->f);
+      list_remove(&(fd->elem));
+      palloc_free_page(fd);
     }
+    lock_release(&memory_lock);
+  }
 }
 
 void
 sys_read(int fd_, void * buffer, int size, struct intr_frame *f)
 {
-  unsigned i;
-  check_memory_byte_by_byte(buffer,sizeof(buffer));
-  check_memory_byte_by_byte(buffer,sizeof(buffer)+size-1);
+  check_memory_byte_by_byte(buffer, sizeof(buffer)+size-1);
+  
   lock_acquire(&memory_lock);
-  //printf("PASSED!\n");
   if(fd_ == STDIN) 
   {
-    for(i=0; i<(unsigned)size; i++)
-      write_mem((unsigned char *)(buffer+i),input_getc());
+    for(unsigned i = 0; i < (unsigned)size; i++)
+      write_mem((unsigned char *)(buffer + i), input_getc());
     lock_release(&memory_lock);
     f->eax = size;
   }
   else if(fd_ == STDOUT)
   {
-    f->eax=-1;
+    f->eax = -1;
     lock_release(&memory_lock);
     return;
   }
-  else if( !fd_validate(fd_) || fd_ < 0)
+  else if(!fd_validate(fd_) || fd_ < 0)
   {
-     
-    f->eax=-1;
+    f->eax = -1;
     lock_release(&memory_lock);
     return;
   }
   else
   {
-    struct list_elem *tmp;
-    struct filedescriptor *fd;
-    if(!list_empty(&thread_current()->fd))
+    struct filedescriptor *fd = find_fd(fd_);
+
+    if(fd != NULL)
     {
-      for(tmp=list_front(&thread_current()->fd); ; tmp=list_next(tmp))
-      {
-        fd = list_entry(tmp, struct filedescriptor, elem);
-        if(fd->fd_num == fd_)
-         break;
-        if(tmp == list_tail(&thread_current()->fd) && (fd->fd_num != fd_))
-        {
-          lock_release(&memory_lock);
-          f->eax=-1;
-          return;
-        }
-       }
-      f->eax = file_read(fd->f,buffer,size);
+      f->eax = file_read(fd->f, buffer,size);
       lock_release(&memory_lock);
-      return ;
-    }    
+      return;
+    }
+    f->eax = -1;
+    lock_release(&memory_lock);
+    return ;   
   }
 }
 
 void
 sys_filesize(int fd_, struct intr_frame *f)
 {
-  struct list_elem *tmp;
-  struct filedescriptor *fd=NULL;
-  if(!list_empty(&thread_current()->fd))
-  {
-    lock_acquire(&memory_lock);
-    for(tmp=list_front(&thread_current()->fd); ; tmp=list_next(tmp))
-    {
-      fd = list_entry(tmp, struct filedescriptor, elem);
-      if(fd->fd_num == fd_)
-       break;
-      if(tmp == list_tail(&thread_current()->fd) && (fd->fd_num != fd_))
-      {
-        lock_release(&memory_lock);
-        f->eax=-1;
-        return;
-      }
-    }
-  }
-  lock_release(&memory_lock);
-  if(fd == NULL)
-    f->eax =-1;
-  else 
+  lock_acquire(&memory_lock);
+  struct filedescriptor *fd = find_fd(fd_);
+
+  if(fd != NULL)
   {
     f->eax = file_length(fd->f);
+    lock_release(&memory_lock);
+    return;
   }
+  f->eax=-1;
+  lock_release(&memory_lock);
 }
 
 void
@@ -489,54 +434,25 @@ sys_remove(char *name, struct intr_frame *f)
 void
 sys_seek(int fd_, int cnt, struct intr_frame *f UNUSED)
 {
-  struct list_elem *tmp;
-  struct filedescriptor *fd=NULL;
-  if(!list_empty(&thread_current()->fd))
-  {
-    lock_acquire(&memory_lock);
-    for(tmp=list_front(&thread_current()->fd); ; tmp=list_next(tmp))
-    {
-      fd = list_entry(tmp, struct filedescriptor, elem);
-      if(fd->fd_num == fd_)
-       break;
-      if(tmp == list_tail(&thread_current()->fd) && (fd->fd_num != fd_))
-      {
-        lock_release(&memory_lock);
-        return;
-      }
-    }
-  }
-  if(fd->f != NULL)
+  lock_acquire(&memory_lock);
+  struct filedescriptor *fd = find_fd(fd_);
+
+  if(fd != NULL)
   {
     file_seek(fd->f,cnt);
     lock_release(&memory_lock);
     return;
   }
-  return;
+  lock_release(&memory_lock);
 }
 
 void 
 sys_tell(int fd_,struct intr_frame *f)
 {
-  struct list_elem *tmp;
-  struct filedescriptor *fd=NULL;
   lock_acquire(&memory_lock);
-  if(!list_empty(&thread_current()->fd))
-  {
-    for(tmp=list_front(&thread_current()->fd); ; tmp=list_next(tmp))
-    {
-      fd = list_entry(tmp, struct filedescriptor, elem);
-      if(fd->fd_num == fd_)
-       break;
-      if(tmp == list_tail(&thread_current()->fd) && (fd->fd_num != fd_))
-      {
-        f->eax=-1;
-        lock_release(&memory_lock);
-        return;
-      }
-    }
-  }
-  if(fd->f != NULL)
+  struct filedescriptor *fd = find_fd(fd_);
+
+  if(fd != NULL)
   {
     f->eax=file_tell(fd->f);
     lock_release(&memory_lock);
@@ -544,4 +460,21 @@ sys_tell(int fd_,struct intr_frame *f)
   }
   f->eax=-1;
   lock_release(&memory_lock);
+}
+
+static struct filedescriptor * find_fd(int fd_)
+{
+  struct thread *t = thread_current();
+  struct filedescriptor *fd = NULL;
+
+  if(!list_empty(&t->fd))
+  {
+    for(struct list_elem *tmp = list_front(&t->fd); tmp != list_tail(&t->fd); tmp = list_next(tmp))
+    {
+      fd = list_entry(tmp, struct filedescriptor, elem);
+      if(fd->fd_num == fd_)
+        return fd;
+    }
+  }
+  return NULL;
 }

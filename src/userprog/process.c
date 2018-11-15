@@ -31,9 +31,10 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 tid_t
 process_execute (const char *file_name) 
 {
-  char *fn_copy=NULL, *argvs, *program=NULL;
-  struct tcb *tcb=NULL;
+  char *fn_copy = NULL, *argvs, *program = NULL;
+  struct tcb *tcb = NULL;
   tid_t tid;
+  struct thread *t = thread_current();
 
   //lock_acquire(&thread_current()->child_lock);
   fn_copy = palloc_get_page (0);
@@ -60,19 +61,15 @@ process_execute (const char *file_name)
   tcb->wait = false;
   tcb->me = NULL;
   tcb->goa = false;
-  tcb->parent = thread_current();
+  tcb->parent = t;
   
   tid = thread_create (program, PRI_DEFAULT, start_process, tcb);
   sema_down(&tcb->sema); //wait until load and push argv to stack
   
   if(tcb->tid == tid)
-  {
-    list_push_back(&thread_current()->child_tcb, &tcb->elem);
-  }
+    list_push_back(&t->child_tcb, &tcb->elem);
   else
-  {
     goto end;
-  }
   if(fn_copy && program)
   {
     palloc_free_page(fn_copy);
@@ -93,7 +90,7 @@ static void
 start_process (void *ptr)
 {
   struct tcb *tcb = ptr;
-  void **esp=NULL;
+  void **esp = NULL;
   char *file_name = tcb->prog;
   char *argv = tcb->argv;
   struct intr_frame if_;
@@ -101,9 +98,10 @@ start_process (void *ptr)
   unsigned stack_size=0;
   unsigned char * argv_ptr;
   unsigned cnt=0;
+  struct thread *t = thread_current();
 
-  thread_current()->tcb = ptr;
-  tcb->me = thread_current();
+  t->tcb = ptr;
+  tcb->me = t;
   
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -115,21 +113,17 @@ start_process (void *ptr)
   { 
     char *tmp;
     char *save;
-    char **token = (const char **)palloc_get_page(0);
+    char **token = palloc_get_page(0);
     int i;
-    tcb->tid = thread_current()->tid;       
+    tcb->tid = t->tid;       
     esp = &if_.esp;
 
     if(strlen(argv) != 0)
     {
       int argc=0;
       for(tmp = strtok_r(argv," ",&save); tmp != NULL; tmp = strtok_r(NULL, " ",&save))
-      {
         if(tmp[0] != ' ')
-        {
           token[argc++] = tmp;
-        }
-      }
       for(i=0; i<argc; i++)
       {
         *esp -= strlen((const char*)token[argc-1-i])+1;
@@ -138,9 +132,9 @@ start_process (void *ptr)
       }
       palloc_free_page(token); // 이거 못찾아서 vm 통과 못했...
     }
-    *esp -= strlen(thread_current()->name)+1; 
-    stack_size += strlen(thread_current()->name) +1;
-    memcpy(*esp, thread_current()->name, strlen(thread_current()->name)+1);
+    *esp -= strlen(t->name)+1; 
+    stack_size += strlen(t->name) +1;
+    memcpy(*esp, t->name, strlen(t->name)+1);
     argv_ptr = PHYS_BASE-2;
     *esp -= 4 - stack_size % 4;
     *esp -= 4;
@@ -218,9 +212,7 @@ process_wait (tid_t child_tid)
     }
   }
   if(tmp==NULL)
-  {
     return -1;
-  }
   if(tcb->wait==true)
   {
     printf("ERROR! child process has been waiting!\n");
@@ -251,9 +243,7 @@ process_exit (void)
     struct list_elem *elem = list_pop_front (list) ;
     tcb = list_entry(elem, struct tcb, elem);
     if(tcb->exit == true)
-    {
       palloc_free_page(tcb);
-    }
     else
     {
       tcb->goa=true;
@@ -280,9 +270,7 @@ process_exit (void)
   
   /*and remove itself if cur thread is orphan */
   if(cur->tcb->goa == true)
-  {
     palloc_free_page(cur->tcb);
-  }
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
