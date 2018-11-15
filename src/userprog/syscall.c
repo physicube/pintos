@@ -1,14 +1,23 @@
 #include "userprog/syscall.h"
 #include "userprog/process.h"
+#include "userprog/pagedir.h"
 #include <stdio.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/malloc.h"
+#include "threads/vaddr.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 
 static void syscall_handler (struct intr_frame *);
+static int get_user (const uint8_t *uaddr);
+static bool put_user (uint8_t *udst, uint8_t byte);
+static uint64_t get_arg(uint8_t *esp, int size);
+static bool valid_pointer(void *esp);
+static bool valid_addr(void *esp);
+
+void sys_exit(int, struct intr_frame *);
 
 void
 syscall_init (void) 
@@ -19,7 +28,7 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f) 
 {
-  int syscall_no = *(int*)(f->esp); 
+  int syscall_no = (int)get_arg(f->esp, sizeof(int)); 
  
   switch (syscall_no) 
   { 
@@ -31,13 +40,8 @@ syscall_handler (struct intr_frame *f)
     case SYS_EXIT : 
     { 
       int status = *(int*)(f->esp + 4);
-      struct thread *t = thread_current();
 
-      printf ("%s: exit(%d)\n", t->name, status);
-      t->exit_status = status;
-      thread_exit();
-
-      f->eax = status;
+      sys_exit(status, f);
       break; 
     }
     case SYS_EXEC :
@@ -115,22 +119,56 @@ syscall_handler (struct intr_frame *f)
   } 
 } 
 
-bool valid_addr(uint8_t *esp)
+void sys_exit(int status, struct intr_frame *f)
 {
-  for (int i = 0; i < 8; i++)
+  struct thread *t = thread_current();
+
+  t->exit_status = status;
+  thread_exit();
+
+  f->eax = status;
+}
+
+static bool valid_pointer(void *esp)
+{
+  if (get_user(esp) != -1 && valid_addr(esp))
+    return true;
+  else
+    return false;
+}
+
+static bool valid_addr(void *esp)
+{
+  struct thread *t = thread_current();
+  
+  if (pagedir_get_page(t->pagedir, esp) != NULL && esp < PHYS_BASE)
+    return true;
+  else 
+    return false;
+}
+
+
+static uint64_t get_arg(uint8_t *esp, int size)
+{
+  printf("get_arg %p is called\n", esp);
+  uint64_t arg = 0;
+
+  for (int i = 0; i < size; i++)
   {
-    if (get_user(esp + i) == -1)
-      return false;
+    if (valid_pointer(esp + i))
+      arg |= (uint8_t)(get_user(esp + i)) << (8 * i);
+    else 
+      sys_exit(-1, NULL);
+      return arg;
   }
-  return true;
+  return arg;
 }
 
 /* Reads a byte at user virtual address UADDR.
    UADDR must be below PHYS_BASE.
    Returns the byte value if successful, -1 if a segfault
    occurred. */
-static int
-get_user (const uint8_t *uaddr)
+static int get_user (const uint8_t *uaddr)
 {
   int result;
   asm ("movl $1f, %0; movzbl %1, %0; 1:"
@@ -141,8 +179,7 @@ get_user (const uint8_t *uaddr)
 /* Writes BYTE to user address UDST.
    UDST must be below PHYS_BASE.
    Returns true if successful, false if a segfault occurred. */
-static bool
-put_user (uint8_t *udst, uint8_t byte)
+static bool put_user (uint8_t *udst, uint8_t byte)
 {
   int error_code;
   asm ("movl $1f, %0; movb %b2, %1; 1:"
