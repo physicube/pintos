@@ -13,7 +13,7 @@
 static void syscall_handler (struct intr_frame *);
 static int get_user (const uint8_t *uaddr);
 static bool put_user (uint8_t *udst, uint8_t byte);
-static uint64_t get_arg(uint8_t *esp, int size);
+static void get_arg(void *arg, uint8_t *esp, int size);
 static bool valid_pointer(void *esp);
 static bool valid_addr(void *esp);
 
@@ -28,7 +28,8 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f) 
 {
-  int syscall_no = (int)get_arg(f->esp, sizeof(int)); 
+  int syscall_no;
+  get_arg(&syscall_no, f->esp, sizeof(int)); 
  
   switch (syscall_no) 
   { 
@@ -39,14 +40,16 @@ syscall_handler (struct intr_frame *f)
     } 
     case SYS_EXIT : 
     { 
-      int status = *(int*)(f->esp + 4);
+      int status;
+      get_arg(&status, f->esp + 4, 4);
 
       sys_exit(status, f);
       break; 
     }
     case SYS_EXEC :
     {
-      char *arg = *(char **)(f->esp + 4);
+      char *arg;
+      get_arg(&arg, f->esp + 4, 4);
       char *cmd_line = malloc(strlen(arg) + 1);
       strlcpy(cmd_line, arg, strlen(arg) + 1);
       pid_t pid = process_execute(cmd_line);
@@ -56,35 +59,39 @@ syscall_handler (struct intr_frame *f)
     }
     case SYS_WAIT :
     {
-      pid_t pid = *(pid_t *)(f->esp + 4); 
+      pid_t pid;
+      get_arg(&pid, f->esp + 4, 4); 
       
       f->eax = process_wait(pid);
       break;
     }
     case SYS_CREATE :
     {
-      const char *file = *(char **)(f->esp + 4); 
-      unsigned initial_state = *(unsigned *)(f->esp + 8); 
+      char *file;
+      unsigned initial_state;
+      get_arg(&file, f->esp + 4, 4); 
+      get_arg(&initial_state, f->esp + 8, 4); 
 
       f->eax = filesys_create(file, initial_state);
       break;
     }
     case SYS_REMOVE :
     {
-      const char *file = *(char **)(f->esp + 4); 
+      char *file;
+      get_arg(&file, f->esp + 4, 4); 
       // maybe some kind of issue can occur
       f->eax = filesys_remove(file);
       break;
     }
     case SYS_OPEN :
     {
-      const char *file = *(char **)(f->esp + 4); 
+      char *file;
+      get_arg(&file, f->esp + 4, 4); 
 
       break;
     }
     case SYS_FILESIZE :
     {
-      int fd = *(int *)(f->esp + 4);
 
       break;
     }
@@ -122,7 +129,7 @@ syscall_handler (struct intr_frame *f)
 void sys_exit(int status, struct intr_frame *f)
 {
   struct thread *t = thread_current();
-
+  printf("%s: exit(%d)\n", t->name, status);
   t->exit_status = status;
   thread_exit();
 
@@ -148,20 +155,15 @@ static bool valid_addr(void *esp)
 }
 
 
-static uint64_t get_arg(uint8_t *esp, int size)
+static void get_arg(void *arg, uint8_t *esp, int size)
 {
-  printf("get_arg %p is called\n", esp);
-  uint64_t arg = 0;
-
   for (int i = 0; i < size; i++)
   {
     if (valid_pointer(esp + i))
-      arg |= (uint8_t)(get_user(esp + i)) << (8 * i);
+      *(char *)(arg + i) = (uint8_t)get_user(esp + i);
     else 
       sys_exit(-1, NULL);
-      return arg;
   }
-  return arg;
 }
 
 /* Reads a byte at user virtual address UADDR.
