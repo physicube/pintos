@@ -34,15 +34,11 @@ process_execute (const char *file_name)
   char *fn_copy = NULL, *argvs, *program = NULL;
   struct tcb *tcb = NULL;
   tid_t tid;
-  struct thread *t = thread_current();
-
-  //lock_acquire(&thread_current()->child_lock);
+  struct thread *cur = thread_current();
   fn_copy = palloc_get_page (0);
   program = palloc_get_page (0);
   tcb = palloc_get_page(0);
-  //fn_copy = calloc(1,sizeof*fn_copy);
-  //program = calloc(1,sizeof*program);
-  //tcb = calloc(1, sizeof*tcb);
+
 
   if(tcb == NULL || fn_copy == NULL || program == NULL)
     PANIC("NULL NULL NULL!!");
@@ -61,13 +57,13 @@ process_execute (const char *file_name)
   tcb->wait = false;
   tcb->me = NULL;
   tcb->goa = false;
-  tcb->parent = t;
+  tcb->parent = cur;
   
   tid = thread_create (program, PRI_DEFAULT, start_process, tcb);
   sema_down(&tcb->sema); //wait until load and push argv to stack
   
   if(tcb->tid == tid)
-    list_push_back(&t->child_tcb, &tcb->elem);
+    list_push_back(&cur->child_tcb, &tcb->elem);
   else
     goto end;
   if(fn_copy && program)
@@ -99,7 +95,7 @@ start_process (void *ptr)
   unsigned char * argv_ptr;
   unsigned cnt=0;
   struct thread *t = thread_current();
-
+  
   t->tcb = ptr;
   tcb->me = t;
   
@@ -109,6 +105,7 @@ start_process (void *ptr)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
+
   if (success) // push argv to stack
   { 
     char *tmp;
@@ -132,6 +129,7 @@ start_process (void *ptr)
       }
       palloc_free_page(token); // 이거 못찾아서 vm 통과 못했...
     }
+
     *esp -= strlen(t->name)+1; 
     stack_size += strlen(t->name) +1;
     memcpy(*esp, t->name, strlen(t->name)+1);
@@ -139,7 +137,8 @@ start_process (void *ptr)
     *esp -= 4 - stack_size % 4;
     *esp -= 4;
     *(unsigned int*)*esp = (unsigned int)NULL;
-    int argc=0;
+    int argc = 0;
+
     for(cnt = 0 ; cnt <= stack_size-1 ; cnt++) // make argv split, and push argv's addr
     {
       if((*(argv_ptr-cnt) == '\0' || *(argv_ptr-cnt)== ' ') &&
@@ -150,6 +149,7 @@ start_process (void *ptr)
           *(unsigned int *)*esp = (unsigned int)(argv_ptr-cnt+1);
       }
     }
+    
     *esp -=4;
     *(unsigned int *)*esp = (unsigned int)*esp+4; // addr of argv[0]'s addr
     *esp -=4;

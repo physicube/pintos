@@ -4,7 +4,7 @@ use Cwd 'abs_path';
 
 # our ($kernel_path) = '/home/pintos/pintos-anon/src/threads/build/kernel.bin'
 our $src_path = (split(/\/src/, abs_path()))[0];
-our $kernel_path = "$src_path/src/userprog/build/kernel.bin";
+our $kernel_path = "$src_path/src/vm/build/kernel.bin";
 
 use strict;
 use POSIX;

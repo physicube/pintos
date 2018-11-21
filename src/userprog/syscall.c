@@ -17,6 +17,7 @@
 #include "threads/palloc.h"
 #include "lib/kernel/list.h"
 #include "devices/input.h"
+#include "vm/swap.h"
 
 static void syscall_handler (struct intr_frame *);
 int read_phys_mem(unsigned char *addr);
@@ -113,6 +114,7 @@ syscall_handler (struct intr_frame *f)
   void *esp = f->esp;
   if(!check_validate(esp) && !check_validate(esp+4) && ! check_validate(esp+8) && !check_validate(esp+12))
     sys_exit(-1,NULL);
+  swap_initialize();
 
   read_mem(&syscall_number, esp, sizeof(syscall_number));
   switch(syscall_number)
