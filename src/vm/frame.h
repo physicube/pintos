@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include "vm/page.h"
 
 #define BITMASK(SHIFT, CNT) (((1ul << (CNT)) - 1) << (SHIFT))
 
@@ -13,6 +14,10 @@
 #define FRSIZE  (1 << PGBITS)              
 #define FRMASK  BITMASK(PGSHIFT, PGBITS)  
 
-
+struct fte 
+{
+    void *frame;
+    struct sup_pte *sup_pte;
+};
 
 #endif

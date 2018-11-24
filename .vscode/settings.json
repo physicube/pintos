@@ -9,6 +9,7 @@
         "system_error": "c",
         "*.inc": "c",
         "stdio.h": "c",
-        "swap.h": "c"
+        "swap.h": "c",
+        "pagedir.h": "c"
     }
 }

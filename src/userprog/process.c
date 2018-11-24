@@ -35,6 +35,10 @@ process_execute (const char *file_name)
   struct tcb *tcb = NULL;
   tid_t tid;
   struct thread *cur = thread_current();
+  printf("palloc user page : %p\n", palloc_get_page(PAL_USER | PAL_ZERO));
+  printf("palloc user page : %p\n", palloc_get_page(PAL_USER | PAL_ZERO));
+  printf("palloc kernel page : %p\n", palloc_get_page(PAL_ZERO));
+  printf("palloc kernel page : %p\n", palloc_get_page(PAL_ZERO));
   fn_copy = palloc_get_page (0);
   program = palloc_get_page (0);
   tcb = palloc_get_page(0);
