@@ -4,13 +4,17 @@
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/vaddr.h"
 #include "userprog/syscall.h"
-
+#include "vm/paging.h"
+#include "vm/frame.h"
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
+static bool determine_stack_frame_and_addr(void * fault_addr, void * esp, struct intr_frame *f);
+
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -123,11 +127,12 @@ kill (struct intr_frame *f)
 static void
 page_fault (struct intr_frame *f) 
 {
+  struct thread * t = thread_current();
   bool not_present;  /* True: not-present page, false: writing r/o page. */
   bool write;        /* True: access was write, false: access was read. */
   bool user;         /* True: access by user, false: access by kernel. */
   void *fault_addr;  /* Fault address. */
-
+  void *get_esp = NULL;
   /* Obtain faulting address, the virtual address that was
      accessed to cause the fault.  It may point to code or to
      data.  It is not necessarily the address of the instruction
@@ -148,17 +153,35 @@ page_fault (struct intr_frame *f)
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
-
-  if(!check_validate(fault_addr))
-    sys_exit(-1,NULL);
-  if(!write)
-    sys_exit(-1,NULL);
-  if(!not_present)
-    sys_exit(-1,NULL);
-  if(fault_addr == NULL)
-    sys_exit(-1,NULL);
+  if(!not_present) sys_exit(-1, NULL);
   
 
+ /* new implemented page fault handler */
+  if(user) get_esp = f->esp;
+  else get_esp = t->esp;
+  
+
+  if(determine_stack_frame_and_addr(fault_addr, get_esp, f))
+  {
+    if(find_supte_in_supt(t->supt, pg_round_down(fault_addr)) == NULL)
+    {
+      frame_install(t->supt, pg_round_down(fault_addr), NULL, false); // mode false == zero page
+    }
+  }
+ 
+  if(!page_load(t->supt, t->pagedir, pg_round_down(fault_addr))) 
+  {
+    goto END;
+  }
+  return;
+
+  END:
+  if(user == false) // in kernel mode
+  {
+    f->eip = (void *)f->eax;
+    f->eax = 0xffffffff;
+    return;
+  }
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */
@@ -168,5 +191,11 @@ page_fault (struct intr_frame *f)
           write ? "writing" : "reading",
           user ? "user" : "kernel");
   kill (f);
+}
+
+bool determine_stack_frame_and_addr(void * fault_addr, void * esp, struct intr_frame *f)
+{
+  return ((fault_addr == f->esp-4 || fault_addr == f->esp-32 || esp <= fault_addr) && 
+         ((PHYS_BASE - STACK_SIZE <= fault_addr) && (fault_addr < PHYS_BASE)));
 }
 

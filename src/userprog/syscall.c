@@ -109,8 +109,9 @@ static void
 syscall_handler (struct intr_frame *f) 
 {
   int syscall_number;
-
-  void *esp = f->esp;
+  void *esp;
+  printf("COME!\n");
+  thread_current()->esp = esp = f->esp;
   if(!check_validate(esp) && !check_validate(esp+4) && ! check_validate(esp+8) && !check_validate(esp+12))
     sys_exit(-1,NULL);
 

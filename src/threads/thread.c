@@ -15,6 +15,9 @@
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
+#include "vm/frame.h"
+#include "vm/paging.h"
+#include "vm/swapping.h"
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -647,7 +650,6 @@ bool fd_validate(int fd_)
   struct list_elem *tmp;
   struct filedescriptor *fd=NULL;
   int lize = list_size(&thread_current()->fd);
-  tid_t fd_num = 2;
   int tmp_=0;
   bool flag=false;
   if(!list_empty(&thread_current()->fd))

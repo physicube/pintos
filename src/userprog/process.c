@@ -20,6 +20,7 @@
 #include "threads/vaddr.h"
 #include "userprog/syscall.h"
 #include "filesys/inode.h"
+#include "vm/paging.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -35,14 +36,10 @@ process_execute (const char *file_name)
   struct tcb *tcb = NULL;
   tid_t tid;
   struct thread *t = thread_current();
-
-  //lock_acquire(&thread_current()->child_lock);
+  
   fn_copy = palloc_get_page (0);
   program = palloc_get_page (0);
   tcb = palloc_get_page(0);
-  //fn_copy = calloc(1,sizeof*fn_copy);
-  //program = calloc(1,sizeof*program);
-  //tcb = calloc(1, sizeof*tcb);
 
   if(tcb == NULL || fn_copy == NULL || program == NULL)
     PANIC("NULL NULL NULL!!");
@@ -156,12 +153,12 @@ start_process (void *ptr)
     *(unsigned int *)*esp = (unsigned int)argc; // push argc
     *esp -=4;
     *(unsigned int *)*esp = (unsigned int)0x0;
+    printf("esp : %p\n", *esp);
+     sema_up(&(tcb->sema));
   }
-  sema_up(&(tcb->sema));
-
-  /*If load failed, quit.*/
-  if (!success) 
+  else if (!success) 
   {
+    sema_up(&(tcb->sema));
     sys_exit(-1,NULL);
   }
   /* Start the user process by simulating a return from an
@@ -170,7 +167,6 @@ start_process (void *ptr)
      arguments on the stack in the form of a `struct intr_frame',
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
-
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
@@ -389,6 +385,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   int i;
 
   /* Allocate and activate page directory. */
+  supt_init();
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
   {
@@ -482,7 +479,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* Set up stack. */
   if (!setup_stack (esp))
     goto done;
-  
+ 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
   success = true;
@@ -562,7 +559,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
-
+  struct thread * t = thread_current();
+  
   file_seek (file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) 
     {
@@ -571,13 +569,13 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
          and zero the final PAGE_ZERO_BYTES bytes. */
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
-
-      /* Get a page of memory. */
+      if(!frame_install_filesys(t->supt, file, upage, ofs, page_read_bytes, page_zero_bytes, writable))
+        return false;
+/*
       uint8_t *kpage = palloc_get_page (PAL_USER);
       if (kpage == NULL)
         return false;
 
-      /* Load this page. */
       if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
         {
           palloc_free_page (kpage);
@@ -585,14 +583,15 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         }
       memset (kpage + page_read_bytes, 0, page_zero_bytes);
 
-      /* Add the page to the process's address space. */
       if (!install_page (upage, kpage, writable)) 
         {
           palloc_free_page (kpage);
           return false; 
         }
-
+*/
+      
       /* Advance. */
+      ofs += PGSIZE;
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
       upage += PGSIZE;
@@ -608,14 +607,14 @@ setup_stack (void **esp)
   uint8_t *kpage;
   bool success = false;
 
-  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+  kpage = frame_allocate(PAL_USER | PAL_ZERO, PHYS_BASE - PGSIZE);
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
         *esp = PHYS_BASE;
       else
-        palloc_free_page (kpage);
+        frame_free_mode(kpage, true);
     }
   return success;
 }
@@ -636,6 +635,13 @@ install_page (void *upage, void *kpage, bool writable)
 
   /* Verify that there's not already a page at that virtual
      address, then map our page there. */
-  return (pagedir_get_page (t->pagedir, upage) == NULL
-          && pagedir_set_page (t->pagedir, upage, kpage, writable));
+  if(pagedir_get_page (t->pagedir, upage) == NULL
+          && pagedir_set_page (t->pagedir, upage, kpage, writable)
+          && frame_install(t->supt, upage, kpage, true))
+    {
+      make_victim_frame(kpage, false);
+      return true;
+    }
+    else
+      return false;
 }

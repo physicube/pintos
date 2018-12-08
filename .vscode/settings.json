@@ -8,6 +8,11 @@
         "vector": "c",
         "system_error": "c",
         "*.inc": "c",
-        "stdio.h": "c"
+        "stdio.h": "c",
+        "hash.h": "c",
+        "swapping.h": "c",
+        "vaddr.h": "c",
+        "synch.h": "c",
+        "exception.h": "c"
     }
 }

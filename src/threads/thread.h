@@ -3,6 +3,7 @@
 
 #include <debug.h>
 #include <list.h>
+#include <hash.h>
 #include <stdint.h>
 #include "threads/synch.h"
 #include "filesys/file.h"
@@ -126,6 +127,10 @@ struct thread
     struct list child_tcb;
     struct list fd;
     struct file *current_file;
+#endif
+#ifdef VM
+    struct SUPT * supt;
+    void * esp;
 #endif
 
     /* Owned by thread.c. */
