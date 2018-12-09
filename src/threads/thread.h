@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include "threads/synch.h"
 #include "filesys/file.h"
+#include "lib/kernel/hash.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -126,6 +127,9 @@ struct thread
     struct list child_tcb;
     struct list fd;
     struct file *current_file;
+    /* for user virtual address */
+    struct hash sptable;
+    struct semaphore page_sema;
 #endif
 
     /* Owned by thread.c. */

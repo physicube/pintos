@@ -16,10 +16,14 @@
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
 #include "threads/thread.h"
+#include "threads/malloc.h"
 #include "lib/string.h"
+#include "lib/kernel/hash.h"
 #include "threads/vaddr.h"
 #include "userprog/syscall.h"
 #include "filesys/inode.h"
+#include "vm/frame.h"
+#include "vm/page.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -35,10 +39,7 @@ process_execute (const char *file_name)
   struct tcb *tcb = NULL;
   tid_t tid;
   struct thread *cur = thread_current();
-  printf("palloc user page : %p\n", palloc_get_page(PAL_USER | PAL_ZERO));
-  printf("palloc user page : %p\n", palloc_get_page(PAL_USER | PAL_ZERO));
-  printf("palloc kernel page : %p\n", palloc_get_page(PAL_ZERO));
-  printf("palloc kernel page : %p\n", palloc_get_page(PAL_ZERO));
+  
   fn_copy = palloc_get_page (0);
   program = palloc_get_page (0);
   tcb = palloc_get_page(0);
@@ -102,6 +103,7 @@ start_process (void *ptr)
   
   t->tcb = ptr;
   tcb->me = t;
+  sptable_init();
   
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -160,6 +162,7 @@ start_process (void *ptr)
     *(unsigned int *)*esp = (unsigned int)argc; // push argc
     *esp -=4;
     *(unsigned int *)*esp = (unsigned int)0x0;
+  
   }
   sema_up(&(tcb->sema));
 
@@ -267,7 +270,10 @@ process_exit (void)
     file_allow_write(cur->current_file);
     file_close(cur->current_file);
   }
-  
+  // free supplement page table 
+  struct hash *sptable = &cur->sptable;
+  hash_destroy(sptable, spte_free);
+
   /* wake up parent process */
   cur->tcb->exit = true;
   sema_up(&(cur->tcb->wait_sema));
@@ -567,40 +573,35 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
 
-  file_seek (file, ofs);
+  off_t tmp_ofs = ofs;
+  struct thread *cur = thread_current();
+
+  // file_seek (file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) 
-    {
-      /* Calculate how to fill this page.
-         We will read PAGE_READ_BYTES bytes from FILE
-         and zero the final PAGE_ZERO_BYTES bytes. */
-      size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
-      size_t page_zero_bytes = PGSIZE - page_read_bytes;
+  {
+    /* Calculate how to fill this page.
+        We will read PAGE_READ_BYTES bytes from FILE
+        and zero the final PAGE_ZERO_BYTES bytes. */
+    size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+    size_t page_zero_bytes = PGSIZE - page_read_bytes;
+    struct spte *spte = malloc(sizeof(struct spte));
 
-      /* Get a page of memory. */
-      uint8_t *kpage = palloc_get_page (PAL_USER);
-      if (kpage == NULL)
-        return false;
+    spte->vaddr = upage;
+    spte->fte = NULL;
+    spte->type = SPTE_FILE;
+    spte->writable = writable;
+    spte->file = file;
+    spte->ofs = tmp_ofs;
+    spte->size = page_read_bytes;
 
-      /* Load this page. */
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
-        {
-          palloc_free_page (kpage);
-          return false; 
-        }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
+    tmp_ofs += page_read_bytes;
+    hash_insert(&cur->sptable, &spte->hash_elem);
 
-      /* Add the page to the process's address space. */
-      if (!install_page (upage, kpage, writable)) 
-        {
-          palloc_free_page (kpage);
-          return false; 
-        }
-
-      /* Advance. */
-      read_bytes -= page_read_bytes;
-      zero_bytes -= page_zero_bytes;
-      upage += PGSIZE;
-    }
+    /* Advance. */
+    read_bytes -= page_read_bytes;
+    zero_bytes -= page_zero_bytes;
+    upage += PGSIZE;
+  }
   return true;
 }
 

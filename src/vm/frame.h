@@ -5,19 +5,25 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "vm/page.h"
+#include "lib/kernel/hash.h"
 
-#define BITMASK(SHIFT, CNT) (((1ul << (CNT)) - 1) << (SHIFT))
 
-/* frame offset (bits 0:12). */
-#define FRSHIFT 0                          
-#define FRBITS  12                         
-#define FRSIZE  (1 << PGBITS)              
-#define FRMASK  BITMASK(PGSHIFT, PGBITS)  
+uint32_t frame_hash(const struct hash_elem *p_, void *aux UNUSED);
+bool frame_less(const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED);
+uint32_t *alloc_frame(struct spte *spte);
+uint32_t *evict_frame();
+void frame_init();
+struct fte *lookup_frame(const void *addr);
 
 struct fte 
 {
-    void *frame;
-    struct sup_pte *sup_pte;
+  uint32_t *addr;
+  struct spte *spte;
+
+  bool accessed;
+  bool dirty;
+
+  struct hash_elem hash_elem;
 };
 
 #endif
