@@ -14,6 +14,8 @@ struct swaptable
 
 void swap_init();
 block_sector_t alloc_swap();
-void swap_write(block_sector_t sector);
+void free_swap(block_sector_t sector);
+void swap_write_page(uint32_t *addr, block_sector_t sector);
+void swap_read_page(uint32_t *addr, block_sector_t sector);
 
 #endif

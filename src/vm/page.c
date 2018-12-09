@@ -41,10 +41,8 @@ void load_page(void *vaddr)
 
   struct fte *fte = alloc_frame(spte);
   if (fte == NULL)
-  {
-    printf("frame alloc failed\n");
     PANIC("frame alloc failed\n");
-  }
+  
   spte->fte = fte;
 
   //printf("map %p to %p\n", vaddr, &fte->addr);

@@ -164,7 +164,7 @@ page_fault (struct intr_frame *f)
   struct thread *cur = thread_current();
   uint32_t *vaddr = pg_round_down(fault_addr);
 
-  if (not_present && user && is_user_vaddr(vaddr))
+  if (not_present && user && is_user_vaddr(vaddr) && vaddr >= 0x8048000)
   {
     load_page(vaddr);
     sema_down(&cur->page_sema);

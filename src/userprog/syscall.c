@@ -85,7 +85,7 @@ bool write_mem(unsigned char *addr, unsigned char byte)
 
 bool check_validate(void *addr)
 {
-  if((addr != NULL) && (((unsigned int)addr) < ((unsigned int)PHYS_BASE)))
+  if((addr != NULL) && is_user_vaddr(addr))
   {
     if(pagedir_get_page(thread_current()->pagedir, addr) != NULL)
       return true;

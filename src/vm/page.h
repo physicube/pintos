@@ -17,6 +17,7 @@ struct spte
   struct fte *fte;
   uint32_t type; /* file, swap etc */
   bool writable;
+  bool pinned;
 
   /* read from file (type == SPTE_FILE) */
   struct file *file;

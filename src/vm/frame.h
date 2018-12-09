@@ -11,7 +11,7 @@
 uint32_t frame_hash(const struct hash_elem *p_, void *aux UNUSED);
 bool frame_less(const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED);
 uint32_t *alloc_frame(struct spte *spte);
-uint32_t *evict_frame();
+struct fte *evict_frame();
 void frame_init();
 struct fte *lookup_frame(const void *addr);
 
@@ -21,7 +21,6 @@ struct fte
   struct spte *spte;
 
   bool accessed;
-  bool dirty;
 
   struct hash_elem hash_elem;
 };
