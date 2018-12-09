@@ -116,7 +116,6 @@ struct FTE *
 get_frame_in_list(struct list * list, void * addr, bool mode)
 {
     struct FTE * fte = NULL;
-
     if(!list_empty(list))
     {
         for(struct list_elem *tmp = list_front(list); tmp != list_tail(list); tmp = list_next(tmp))

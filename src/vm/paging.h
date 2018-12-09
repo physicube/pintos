@@ -13,7 +13,7 @@ enum supte_status
 
 struct SUPT
 {
-    struct hash page;
+    struct list page_list;
 };
 
 struct SUPTE
@@ -28,6 +28,7 @@ struct SUPTE
     bool is_write;
     
     struct hash_elem elem;
+    struct list_elem lelem;
 };
 
 void supt_init(void);

@@ -606,7 +606,6 @@ setup_stack (void **esp)
 {
   uint8_t *kpage;
   bool success = false;
-
   kpage = frame_allocate(PAL_USER | PAL_ZERO, PHYS_BASE - PGSIZE);
   if (kpage != NULL) 
     {
@@ -635,9 +634,10 @@ install_page (void *upage, void *kpage, bool writable)
 
   /* Verify that there's not already a page at that virtual
      address, then map our page there. */
-  if(pagedir_get_page (t->pagedir, upage) == NULL
-          && pagedir_set_page (t->pagedir, upage, kpage, writable)
-          && frame_install(t->supt, upage, kpage, true))
+  if(     (pagedir_get_page (t->pagedir, upage) == NULL)
+          && (pagedir_set_page (t->pagedir, upage, kpage, writable))
+          && (frame_install(t->supt, upage, kpage, true))
+    )
     {
       make_victim_frame(kpage, false);
       return true;

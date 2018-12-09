@@ -13,24 +13,23 @@
 #include "filesys/file.h"
 #include "lib/kernel/hash.h"
 
-static struct SUPTE supte_tmp;
-static struct hash_elem * elem_tmp;
-
-static void destroy_func(struct hash_elem *elem, void *aux);
-
 void supt_init(void)
 {
     struct thread * t = thread_current();
     t->supt = (struct SUPT *)malloc(sizeof(struct SUPT));
-    printf("BURST!\n");
-     // this function is required to initialize hash table.
-    hash_init(&t->supt->page, hash_func1, hash_func2, NULL);
+    list_init(&t->supt->page_list);
 }
 
 void supt_remove(void)
 {
+    struct SUPTE * supte;
     struct thread * t = thread_current();
-    hash_destroy(&t->supt->page, destroy_func);
+    for(;!list_empty(&t->supt->page_list);)
+    {
+        struct list_elem *elem = list_pop_front (&t->supt->page_list) ;
+        supte = list_entry(elem, struct SUPTE, lelem);
+        free(supte);
+    }
 }
 
 bool frame_install(struct SUPT * supt, void * uaddr, void * paddr, bool mode) // mode true = frame, false = zero page
@@ -51,26 +50,17 @@ bool frame_install(struct SUPT * supt, void * uaddr, void * paddr, bool mode) //
         supte->dirty_bit = false;
         supte->paddr = NULL;        
     }
-    if(!hash_insert(&supt->page, &supte->elem))
-    {
-        struct SUPTE * supte_;
-        struct hash_iterator it;
-        int tmp_1=0;
-        hash_first(&it, &supt->page);
-        while(hash_next(&it))
-        {
-          supte_ = hash_entry(hash_cur(&it), struct SUPTE, elem);
-          printf("hash : %p, page %d : kpage : %p, upage: %p, status : %d,  owner : %s \n",supt,tmp_1++,supte->paddr, supte->uaddr, supte->status, thread_current()->name);
-        }
-        printf("\n\n");
-        return true;
-    }
-    else
-    {
-        free(supte);
-        return false;
-    }
 
+    list_push_back(&supt->page_list, &supte->lelem);
+    struct SUPTE * supte_;
+    int it = 0;
+    for(struct list_elem *tmp = list_front(&supt->page_list); tmp != list_tail(&supt->page_list); tmp = list_next(tmp))
+    {
+      supte_ = list_entry(tmp, struct SUPTE, lelem);
+      printf("hash %d : kpage : %p, upage: %p,  status : %d, owner : %s \n",it++,supte_->paddr, supte_->uaddr, supte_->status, thread_current()->name);
+    }
+    printf("\n\n");
+    return true;
 }
 
 bool frame_install_filesys(struct SUPT* supt, struct file * file, void * uaddr, size_t off, size_t read_b, size_t zero_b, bool write)
@@ -86,26 +76,17 @@ bool frame_install_filesys(struct SUPT* supt, struct file * file, void * uaddr, 
     supte->dirty_bit = false;
     supte->status = FILE;
     printf("Input upage : %p\n",uaddr);
-    if(!(hash_insert(&supt->page, &supte->elem)))
+    
+    list_push_back(&supt->page_list, &supte->lelem);
+    struct SUPTE * supte_;
+    int it=0;
+    for(struct list_elem *tmp = list_front(&supt->page_list); tmp != list_tail(&supt->page_list); tmp = list_next(tmp))
     {
-        struct SUPTE * supte_;
-        struct hash_iterator it;
-        int tmp_1=0;
-        hash_first(&it, &supt->page);
-        while(hash_next(&it))
-        {
-          supte_ = hash_entry(hash_cur(&it), struct SUPTE, elem);
-          printf("hash : %p, page %d : kpage : %p, upage: %p, status : %d,  owner : %s \n",supt,tmp_1++,supte->paddr, supte->uaddr, supte->status, thread_current()->name);
-        }
-        printf("\n\n");
-        return true;
+      supte_ = list_entry(tmp, struct SUPTE, lelem);
+      printf("hash %d : kpage : %p, upage: %p,  status : %d, owner : %s \n",it++,supte_->paddr, supte_->uaddr, supte_->status, thread_current()->name);
     }
-    else
-    {
-        printf("you cannot reach this. in frame_install_from_filesys(). :P\n");
-        free(supte);
-        NOT_REACHED();
-    }
+    printf("\n\n");
+    return true;
 }
 
 bool page_load(struct SUPT * supt, uint32_t *pagedir, void * uaddr)
@@ -180,17 +161,23 @@ make_page_victim(struct SUPT * supt, void * addr, bool mode) // mode true == mak
 
 struct SUPTE * find_supte_in_supt(struct SUPT * supt, void *uaddr)
 {
-    supte_tmp.uaddr = uaddr;
-    elem_tmp = hash_find(&supt->page, &supte_tmp.elem);
-        
-    if(!elem_tmp)
-        return NULL;
+    struct SUPTE * supte;
+    if(!list_empty(&supt->page_list))
+    {
+        for(struct list_elem *tmp = list_front(&supt->page_list); tmp != list_tail(&supt->page_list); tmp = list_next(tmp))
+        {
+            supte = list_entry(tmp, struct SUPTE, lelem);
+            if((size_t)supte->uaddr == (size_t)uaddr)
+                return supte;
+        }
+        return NULL; // cannot find supte.
+    }
     else
     {
-        return hash_entry(elem_tmp, struct SUPTE, elem);
+        PANIC("List is empty!\n");
+        return NULL;
     }
 }
-
 
 void set_dirty_supt(struct SUPT* supt, void * uaddr, bool dirty_bit)
 {
@@ -220,41 +207,4 @@ void get_and_set_swap_idx(struct SUPT * supt, void *uaddr)
         supte->paddr = NULL;
         supte->swap_idx = swap_out(uaddr);
     }
-}
-
-
-
-
-
-// helping functions
-
-unsigned
-hash_func1(const struct hash_elem *elem, void *aux)
-{
-  struct SUPTE *supte = hash_entry(elem, struct SUPTE, elem);
-  return hash_int((int)supte->uaddr);
-}
-bool
-hash_func2(const struct hash_elem *a, const struct hash_elem *b, void *aux)
-{
-  struct SUPTE *a_supte = hash_entry(a, struct SUPTE, elem);
-  struct SUPTE *b_supte = hash_entry(b, struct SUPTE, elem);
-  if(a_supte->uaddr < b_supte->uaddr)
-    return true;
-   else
-    return false;
-}
-static void
-destroy_func(struct hash_elem *elem, void *aux)
-{
-  struct SUPTE *supte = hash_entry(elem, struct SUPTE, elem);
-
-  if (supte->paddr) 
-  {
-      frame_free_mode(supte->paddr, false);
-  }
-  else if(supte->status == SWAP) {
-      swap_free (supte->swap_idx);
-  }
-  free (supte);
 }

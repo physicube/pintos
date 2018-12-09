@@ -142,10 +142,11 @@ page_fault (struct intr_frame *f)
      (#PF)". */
   asm ("movl %%cr2, %0" : "=r" (fault_addr));
 
+  
   /* Turn interrupts back on (they were only off so that we could
      be assured of reading CR2 before it changed). */
   intr_enable ();
-
+  
   /* Count page faults. */
   page_fault_cnt++;
 
@@ -154,8 +155,8 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
   if(!not_present) sys_exit(-1, NULL);
-  
 
+  printf("pagefault : %p, eip : %p\n",fault_addr,f->eip);
  /* new implemented page fault handler */
   if(user) get_esp = f->esp;
   else get_esp = t->esp;
@@ -176,12 +177,13 @@ page_fault (struct intr_frame *f)
   return;
 
   END:
-  if(user == false) // in kernel mode
+   if(user == false) // in kernel mode
   {
     f->eip = (void *)f->eax;
     f->eax = 0xffffffff;
     return;
   }
+
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */
