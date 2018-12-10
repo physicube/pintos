@@ -26,7 +26,7 @@ int read_phys_mem(unsigned char *addr);
 struct lock memory_lock;
 bool check_validate(void *addr);
 void check_memory_byte_by_byte(void * addr, size_t size);
-void read_mem(void *f, unsigned char *esp, int num, bool is_pointer);
+void read_mem(void *f, unsigned char *esp, int num);
 bool write_mem(unsigned char *addr, unsigned char byte);
 void sys_exit(int , struct intr_frame * UNUSED);
 void sys_wait(int , struct intr_frame *);
@@ -45,6 +45,8 @@ void sys_munmap(int, struct intr_frame *);
 
 static struct filedescriptor * find_fd(int fd_);
 static int give_mpid(struct list * mlist);
+
+static int fd_num=2;
 void
 syscall_init (void) 
 {
@@ -54,10 +56,15 @@ syscall_init (void)
 
 void check_memory_byte_by_byte(void * addr, size_t size)
 {
+  unsigned i;
   unsigned char *_cmd = addr;
-  for(unsigned i = 0; i < size; i++)
-    if(!check_validate((void *)(_cmd + i)))
-      sys_exit(-1, NULL);
+  for(i=0; i<size; i++)
+  {
+    if(!check_validate((void *)(_cmd+i)))
+    {
+      sys_exit(-1,NULL);
+    }
+  }
 }
 
 int read_phys_mem(unsigned char *addr)
@@ -85,52 +92,47 @@ bool write_mem(unsigned char *addr, unsigned char byte)
   }
   else
     sys_exit(-1,NULL);
-    return false;
 }
 
 bool check_validate(void *addr)
 {
-  if(addr >= 0x8048000 && is_user_vaddr(addr))
-    return true;
+  if((addr != NULL) && (((unsigned int)addr) < ((unsigned int)PHYS_BASE)))
+  {
+    if((pagedir_get_page(thread_current()->pagedir, addr)) != NULL)
+    {
+      return true;
+    }
+    else
+    {
+      return false;
+    }
+  }
   return false;
 }
 
-void read_mem(void *f, unsigned char *esp, int num, bool is_pointer)
+void read_mem(void *f, unsigned char *esp, int num)
 {
-  if (check_validate(esp) && check_validate(esp + num))
+  int i;
+  for(i=0; i<num; i++)
   {
-    for (int i = 0; i < num; i++)
-    {
-      int tmp = read_phys_mem(esp + i);
-      if (tmp != -1)
-        *(char *)(f + i) = tmp & 0xff;
-      else
-        sys_exit(-1, NULL);
-    }
-    uint32_t *pointer = *(uint32_t *)f;
-
-    if (is_pointer && is_user_vaddr(pointer) && pointer >= 0x8048000)
-    {
-      alloc_user_pointer(pg_round_down(pointer));
-    }
+    if(check_validate(esp + i))
+      *(char *)(f+i) = read_phys_mem((esp + i)) & 0xff;
+    else
+      sys_exit(-1,NULL);
   }
-  else
-    sys_exit(-1, NULL);
 }
-
-
 
 static void
 syscall_handler (struct intr_frame *f) 
 {
   int syscall_number;
+
   void *esp = f->esp;
-
   if(!check_validate(esp) && !check_validate(esp+4) && ! check_validate(esp+8) && !check_validate(esp+12))
+  {
     sys_exit(-1,NULL);
-  
-
-  read_mem(&syscall_number, esp, sizeof(syscall_number), false);
+  }
+  read_mem(&syscall_number, esp, sizeof(syscall_number));
   switch(syscall_number)
   {
     case SYS_HALT: 
@@ -141,51 +143,51 @@ syscall_handler (struct intr_frame *f)
     case SYS_EXIT: 
     { 
       int exit_code;
-      read_mem(&exit_code, esp+4, sizeof(exit_code), false);
+      read_mem(&exit_code, esp+4, sizeof(exit_code));
       sys_exit(exit_code,f);
       break;
     }
     case SYS_EXEC: 
     { 
-      void *cmd;
-      read_mem(&cmd, esp+4, sizeof(cmd), true);
+      void * cmd;
+      read_mem(&cmd, esp+4, sizeof(cmd));
       sys_exec(cmd,f);
       break;
     }
     case SYS_WAIT:
     { 
       int tid;
-      read_mem(&tid,esp+4, sizeof(tid), false);
+      read_mem(&tid,esp+4,sizeof(tid));
       sys_wait(tid,f);
       break;
     }
     case SYS_CREATE: 
     {
-      char *name;
+      char * name;
       size_t size;
-      read_mem(&name, esp+4, sizeof(name), true);
-      read_mem(&size, esp+8, sizeof(size), false);
+      read_mem(&name, esp+4, sizeof(name));
+      read_mem(&size, esp+8, sizeof(size));
       sys_create(name,size,f);
       break;
     }
     case SYS_REMOVE: 
     {
-      char *name;
-      read_mem(&name,esp+4, sizeof(name), true);
+      char * name;
+      read_mem(&name,esp+4,sizeof(name));
       sys_remove(name,f);
       break;
     }
     case SYS_OPEN: 
     {
       char *name;
-      read_mem(&name, esp+4, sizeof(name), true);
+      read_mem(&name, esp+4, sizeof(name));
       sys_open(name,f);
       break;
     }
     case SYS_FILESIZE: 
     {
       int fd;
-      read_mem(&fd,esp+4, sizeof(fd), false);
+      read_mem(&fd,esp+4,sizeof(fd));
       sys_filesize(fd,f);
       break;
     }
@@ -193,9 +195,9 @@ syscall_handler (struct intr_frame *f)
     {
       int fd, size;
       void *buffer;
-      read_mem(&fd,esp+4, sizeof(fd), false);
-      read_mem(&buffer, esp+8, sizeof(fd), true);
-      read_mem(&size, esp+12, sizeof(fd), false);
+      read_mem(&fd,esp+4,sizeof(fd));
+      read_mem(&buffer, esp+8, sizeof(fd));
+      read_mem(&size, esp+12, sizeof(fd));
       sys_read(fd,buffer,size,f);
       break;
     }
@@ -203,31 +205,31 @@ syscall_handler (struct intr_frame *f)
     { 
       int fd, size;
       void *buffer;
-      read_mem(&fd,esp+4, sizeof(fd), false);
-      read_mem(&buffer, esp+8, sizeof(buffer), true);
-      read_mem(&size, esp+12, sizeof(size), false);
-      sys_write(fd,buffer, size, f);
+      read_mem(&fd,esp+4,sizeof(fd));
+      read_mem(&buffer, esp+8, sizeof(buffer));
+      read_mem(&size, esp+12, sizeof(size));
+      sys_write(fd,buffer,size,f);
       break;
     }
     case SYS_SEEK: 
     {
       int fd, cnt;
-      read_mem(&fd,esp+4, sizeof(fd), false);
-      read_mem(&cnt,esp+8, sizeof(cnt), false);
+      read_mem(&fd,esp+4,sizeof(fd));
+      read_mem(&cnt,esp+8,sizeof(cnt));
       sys_seek(fd, cnt, f);
       break;
     }
     case SYS_TELL: 
     {
       int fd;
-      read_mem(&fd,esp+4, sizeof(fd), false);
+      read_mem(&fd,esp+4,sizeof(fd));
       sys_tell(fd,f);
       break;
     }
     case SYS_CLOSE: 
     {
       int fd;
-      read_mem(&fd, esp+4, sizeof(fd), false);
+      read_mem(&fd, esp+4, sizeof(fd));
       sys_close(fd,f);
       break;
     }
@@ -235,22 +237,23 @@ syscall_handler (struct intr_frame *f)
     {
       int fd;
       void *buffer;
-      read_mem(&fd, esp+4, sizeof(fd), false);
-      read_mem(&buffer, esp+8, sizeof(buffer), true);
+      read_mem(&fd, esp+4, sizeof(fd));
+      read_mem(&buffer, esp+8, sizeof(buffer));
+       printf("mmap!\n");
       sys_mmap(fd, buffer, f);
       break;
     }
     case SYS_MUNMAP:
     {
       int mid;
-      read_mem(&mid, esp+4, sizeof(mid), false);
+      read_mem(&mid, esp+4, sizeof(mid));
       sys_munmap(mid,f);
       break;
     }
     default:
     {
       int exit_code;
-      read_mem(&exit_code, esp+4, sizeof(exit_code), false);
+      read_mem(&exit_code, esp+4, sizeof(exit_code));
       sys_exit(exit_code, NULL);
     }
   }
@@ -500,7 +503,7 @@ void sys_mmap(int fd_, void* buffer, struct intr_frame *f)
   struct filedescriptor * fd = NULL;
   size_t file_size = 0;
   size_t ofs = 0;
-
+  printf("mmap OPEN!\n");
   lock_acquire(&memory_lock);
 
   if(fd_ < 2 || !buffer || pg_ofs(buffer) != 0)
@@ -512,12 +515,12 @@ void sys_mmap(int fd_, void* buffer, struct intr_frame *f)
   
   for(ofs = 0; ofs < file_size; ofs += PGSIZE)
   {
-    if(!(lookup_spte(buffer + ofs)) || !pagedir_get_page(t->pagedir, buffer+ofs));
+    if(!(lookup_spte(buffer + ofs)) || !pagedir_get_page(t->pagedir, buffer+ofs))
       goto END; // pages are not enough
   }
-
+  struct file * file_garage = file_reopen(fd->f);
   void * addr = NULL;
-  size_t read_b, zero_b;
+  size_t read_b;
   for(ofs = 0; ofs < file_size; ofs += PGSIZE)
   {
     addr = buffer + ofs;
@@ -525,16 +528,16 @@ void sys_mmap(int fd_, void* buffer, struct intr_frame *f)
       read_b = PGSIZE;
     else
       read_b = file_size - ofs;
-    zero_b = PGSIZE - read_b;
 
     struct spte *spte = malloc(sizeof(struct spte));
     spte->vaddr = buffer;
     spte->fte = NULL;
     spte->type = SPTE_FILE;
     spte->writable = true;
-    spte->file = fd->f;
+    spte->file = file_garage;
     spte->ofs = ofs;
     spte->size = read_b;
+    spte->is_load = false;
 
     struct hash_elem * prev = hash_insert(&t->sptable, &spte->hash_elem);
     if(!prev)
@@ -545,7 +548,7 @@ void sys_mmap(int fd_, void* buffer, struct intr_frame *f)
   }
   
   mmap_str = (struct mmap_str *)malloc(sizeof(mmap_str));
-  mmap_str->file = fd->f;
+  mmap_str->file = file_garage;
   mmap_str->file_size = file_size;
   mmap_str->id = give_mpid(&t->mlist);
   mmap_str->uaddr = buffer;

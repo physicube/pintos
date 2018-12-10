@@ -57,6 +57,7 @@ bool load_page(void *vaddr, bool create)
   //rintf("frame alloc done\n");
   spte->fte = fte;
   spte->type = SPTE_LIVE;
+  spte->is_load = true;
 
   //printf("map %p to %p\n", vaddr, &fte->addr);
   install_page(vaddr, &fte->addr, spte->writable);
