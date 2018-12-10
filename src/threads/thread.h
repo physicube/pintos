@@ -130,6 +130,7 @@ struct thread
     /* for user virtual address */
     struct hash sptable;
     struct semaphore page_sema;
+    struct list mlist;
 #endif
 
     /* Owned by thread.c. */
