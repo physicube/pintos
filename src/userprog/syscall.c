@@ -18,6 +18,8 @@
 #include "lib/kernel/list.h"
 #include "devices/input.h"
 #include "vm/swap.h"
+#include "threads/malloc.h"
+#include "vm/page.h"
 
 static void syscall_handler (struct intr_frame *);
 int read_phys_mem(unsigned char *addr);
@@ -38,8 +40,11 @@ void sys_filesize(int , struct intr_frame*);
 void sys_remove(char *, struct intr_frame*);
 void sys_seek(int, int, struct intr_frame * UNUSED);
 void sys_tell(int , struct intr_frame *f);
-static struct filedescriptor * find_fd(int fd_);
+void sys_mmap(int, void*, struct intr_frame *);
+void sys_munmap(int, struct intr_frame *);
 
+static struct filedescriptor * find_fd(int fd_);
+static int give_mpid(struct list * mlist);
 void
 syscall_init (void) 
 {
@@ -215,6 +220,22 @@ syscall_handler (struct intr_frame *f)
       int fd;
       read_mem(&fd, esp+4, sizeof(fd));
       sys_close(fd,f);
+      break;
+    }
+    case SYS_MMAP:
+    {
+      int fd;
+      void * buffer;
+      read_mem(&fd, esp+4, sizeof(fd));
+      read_mem(&buffer, esp+8, sizeof(buffer));
+      sys_mmap(fd, buffer, f);
+      break;
+    }
+    case SYS_MUNMAP:
+    {
+      int mid;
+      read_mem(&mid, esp+4, sizeof(mid));
+      sys_munmap(mid,f);
       break;
     }
     default:
@@ -463,6 +484,126 @@ sys_tell(int fd_,struct intr_frame *f)
   lock_release(&memory_lock);
 }
 
+void sys_mmap(int fd_, void* buffer, struct intr_frame *f)
+{
+  struct thread *t = thread_current();
+  struct mmap_str * mmap_str = NULL;
+  struct filedescriptor * fd = NULL;
+  size_t file_size = 0;
+  size_t ofs = 0;
+
+  lock_acquire(&memory_lock);
+
+  if(fd_ < 2 || !buffer || pg_ofs(buffer) != 0)
+    goto END;
+  if(!(fd = find_fd(fd_)))
+    goto END;
+  if((file_size = file_length(fd->f)) <= 0)
+    goto END;
+  
+  for(ofs = 0; ofs < file_size; ofs += PGSIZE)
+  {
+    if(!(lookup_spte(buffer + ofs)) || !pagedir_get_page(t->pagedir, buffer+ofs));
+      goto END; // pages are not enough
+  }
+
+  void * addr = NULL;
+  size_t read_b, zero_b;
+  for(ofs = 0; ofs < file_size; ofs += PGSIZE)
+  {
+    addr = buffer + ofs;
+    if(ofs + PGSIZE < file_size)
+      read_b = PGSIZE;
+    else
+      read_b = file_size - ofs;
+    zero_b = PGSIZE - read_b;
+
+    struct spte *spte = malloc(sizeof(struct spte));
+    spte->vaddr = buffer;
+    spte->fte = NULL;
+    spte->type = SPTE_FILE;
+    spte->writable = true;
+    spte->file = fd->f;
+    spte->ofs = ofs;
+    spte->size = read_b;
+
+    struct hash_elem * prev = hash_insert(&t->sptable, &spte->hash_elem);
+    if(!prev)
+    {
+      free(spte);
+      goto END;
+    }
+  }
+  
+  mmap_str = (struct mmap_str *)malloc(sizeof(mmap_str));
+  mmap_str->file = fd->f;
+  mmap_str->file_size = file_size;
+  mmap_str->id = give_mpid(&t->mlist);
+  mmap_str->uaddr = buffer;
+  list_push_back(&t->mlist, &mmap_str->elem);
+  lock_release(&memory_lock);
+  return;
+
+  END:
+  f->eax = -1;
+  lock_release(&memory_lock);
+  return;
+}
+
+void sys_munmap(int mid, struct intr_frame *f)
+{
+  struct thread * t = thread_current();
+  struct mmap_str * mmap_ = NULL;
+  struct list * list = &t->mlist;
+  size_t ofs, file_size, mmap_byte;
+  void * addr;
+ 
+  lock_acquire(&memory_lock);
+  if(!list_empty(list))
+  {
+    struct list_elem * elem;
+    for(elem = list_begin(list); elem != list_end(list); elem = list_next(elem))
+    {
+      mmap_ = list_entry(elem, struct mmap_str, elem);
+    }
+  }
+  else
+    goto END;
+  if(!mmap_) goto END;
+
+  file_size = mmap_->file_size;
+  for(ofs = 0; ofs < file_size; ofs += PGSIZE)
+  {
+    addr = ofs + mmap_->uaddr;
+    if(ofs + PGSIZE < file_size)
+      mmap_byte = PGSIZE;
+    else
+      mmap_byte = file_size - ofs;
+    
+  }
+
+
+
+  END:
+  lock_release(&memory_lock);
+  return;
+}
+
+
+
+static int give_mpid(struct list * mlist)
+{
+  if(list_size(mlist) == 0)
+  {
+    return 1;
+  }
+  else
+  {
+    return list_entry(list_back(mlist), struct mmap_str, elem)->id+1;
+  }
+}
+
+
 static struct filedescriptor * find_fd(int fd_)
 {
   struct thread *t = thread_current();
@@ -479,3 +620,5 @@ static struct filedescriptor * find_fd(int fd_)
   }
   return NULL;
 }
+
+

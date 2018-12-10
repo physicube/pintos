@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include "threads/thread.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/vaddr.h"
 #include "threads/synch.h"
 #include "userprog/pagedir.h"
