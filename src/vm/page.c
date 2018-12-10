@@ -25,7 +25,7 @@ bool load_page(void *vaddr, bool create)
   //printf("load page called\n");
   struct thread *cur = thread_current();
   struct hash *sptable = &cur->sptable;
-
+  bool writable = true;
   ASSERT(!pagedir_get_page(cur->pagedir, vaddr));
   ASSERT(is_user_vaddr(vaddr));
   struct spte *spte = lookup_spte(vaddr);
@@ -48,21 +48,28 @@ bool load_page(void *vaddr, bool create)
       return false;
   }
   //printf("get spte finished!\n");
-  struct fte *fte = alloc_frame(spte);
+  struct fte *fte = (struct fte*)alloc_frame(spte);
   if (!fte)
   {
     printf("frame alloc failed\n");
     PANIC("frame alloc failed\n");
   }
+  if(spte->type == SPTE_FILE)
+    writable = spte->writable;
   //rintf("frame alloc done\n");
   spte->fte = fte;
   spte->type = SPTE_LIVE;
   spte->is_load = true;
-
+ // printf("[LOAD PAGE] spte->vaddr: %p, spte->fte : %p, spte->fte->addr : %p\n",spte->vaddr, spte->fte, spte->fte->addr);
   //printf("map %p to %p\n", vaddr, &fte->addr);
-  install_page(vaddr, &fte->addr, spte->writable);
-  
+  pagedir_set_page(thread_current()->pagedir, vaddr, fte->addr, writable);
   sema_up(&cur->page_sema);
+
+
+
+
+
+
   return true;
 }
 
