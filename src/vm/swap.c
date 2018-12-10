@@ -15,6 +15,7 @@ void swap_init()
   swap = block_get_role(BLOCK_SWAP);
   swap_size = block_size(swap);
   swaptable.used_map = bitmap_create(swap_size);
+  lock_init(&swaptable.lock);
 }
 
 block_sector_t alloc_swap()
@@ -42,17 +43,20 @@ void free_swap(block_sector_t sector)
   lock_release(&swaptable.lock);
 }
 
-void swap_write_page(uint32_t *addr, block_sector_t sector)
+void swap_write_page(char *addr, block_sector_t sector)
 {
   lock_acquire(&swaptable.lock);
 
   for (unsigned i = 0; i < PGSIZE / BLOCK_SECTOR_SIZE; i++)
+  {
     block_write(swap, sector + i, addr + BLOCK_SECTOR_SIZE * i);
+    //printf("write %p to sector %d success %d/8\n",addr + BLOCK_SECTOR_SIZE * i, sector + i, i);
+  }
 
   lock_release(&swaptable.lock);
 }
 
-void swap_read_page(uint32_t *addr, block_sector_t sector)
+void swap_read_page(char *addr, block_sector_t sector)
 {
   lock_acquire(&swaptable.lock);
 

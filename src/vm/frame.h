@@ -21,7 +21,9 @@ struct fte
   struct spte *spte;
 
   bool accessed;
+  bool pinned;
 
+  uint32_t magic;
   struct hash_elem hash_elem;
 };
 

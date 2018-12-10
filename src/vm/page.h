@@ -10,10 +10,11 @@
 #define SPTE_LIVE 0
 #define SPTE_FILE 1
 #define SPTE_SWAP 2
+#define STACK_MAX 8 * 1024 * 1024
 
 struct spte
 {
-  void *vaddr;
+  uint32_t *vaddr;
   struct fte *fte;
   uint32_t type; /* file, swap etc */
   bool writable;
@@ -28,6 +29,7 @@ struct spte
   block_sector_t sector;
 
   /* member of hash table spt */
+  uint32_t magic;
   struct hash_elem hash_elem;
 };
 
@@ -35,7 +37,8 @@ uint32_t spte_hash(const struct hash_elem *p_, void *aux UNUSED);
 bool spte_less(const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED);
 void sptable_init();
 void spte_free(struct hash_elem *e, void *aux);
-void load_page(void *vaddr);
+bool load_page(void *vaddr, bool create);
 struct spte *lookup_spte(const void *vaddr);
+void alloc_user_pointer(void *vaddr);
 
 #endif

@@ -6,6 +6,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "userprog/syscall.h"
+#include "userprog/pagedir.h"
 #include "vm/page.h"
 #include "vm/frame.h"
 
@@ -163,11 +164,26 @@ page_fault (struct intr_frame *f)
   */  
   struct thread *cur = thread_current();
   uint32_t *vaddr = pg_round_down(fault_addr);
-
-  if (not_present && user && is_user_vaddr(vaddr) && vaddr >= 0x8048000)
+  void *esp = f->esp;
+  //printf("esp %p, eip %p\n", esp, f->eip);
+  if(!user) 
   {
-    load_page(vaddr);
+    //printf("kernel page fault occured!\n");
+    f->eip = f->eax;
+    f->eax = 0xffffffff;
+    return;
+
+  }
+  if (esp < PHYS_BASE - STACK_MAX || !is_user_vaddr(esp))
+  {
+    sys_exit(-1,NULL);
+  }
+
+  if (not_present && is_user_vaddr(fault_addr) && fault_addr >= 0x8048000)
+  {
+    load_page(vaddr, true);
     sema_down(&cur->page_sema);
+    //printf("page fault handler finished!\n");
   }
   else
   {
@@ -178,5 +194,7 @@ page_fault (struct intr_frame *f)
           user ? "user" : "kernel");
     sys_exit(-1,NULL);
   }
+
+  
 }
 

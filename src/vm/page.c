@@ -20,43 +20,70 @@ void sptable_init()
 }
 
 /* allocate new frame for vaddr and map it */
-void load_page(void *vaddr)
+bool load_page(void *vaddr, bool create)
 {
+  //printf("load page called\n");
   struct thread *cur = thread_current();
   struct hash *sptable = &cur->sptable;
+
   ASSERT(!pagedir_get_page(cur->pagedir, vaddr));
-
-
+  ASSERT(is_user_vaddr(vaddr));
   struct spte *spte = lookup_spte(vaddr);
-  if (spte == NULL)
+
+  if (!spte)
   {
-    spte = malloc(sizeof(struct spte));
-    spte->vaddr = vaddr;
-    spte->writable = true;
-    spte->type = SPTE_LIVE;
-    spte->ofs = 0;
-    spte->size = PGSIZE;
-
-    hash_insert(&cur->sptable, &spte->hash_elem);
+    if (create)
+    {
+      spte = malloc(sizeof(struct spte));
+      spte->vaddr = vaddr;
+      spte->writable = true;
+      spte->type = SPTE_LIVE;
+      spte->ofs = 0;
+      spte->magic = 0xdeadbeef;
+      spte->size = PGSIZE;
+      hash_insert(&cur->sptable, &spte->hash_elem);
+      //printf("new spte created\n");
+    }
+    else
+      return false;
   }
-
+  //printf("get spte finished!\n");
   struct fte *fte = alloc_frame(spte);
-  if (fte == NULL)
+  if (!fte)
+  {
+    printf("frame alloc failed\n");
     PANIC("frame alloc failed\n");
-  
+  }
+  //rintf("frame alloc done\n");
   spte->fte = fte;
+  spte->type = SPTE_LIVE;
 
   //printf("map %p to %p\n", vaddr, &fte->addr);
   install_page(vaddr, &fte->addr, spte->writable);
-  spte->type = SPTE_LIVE;
-
+  
   sema_up(&cur->page_sema);
+  return true;
 }
+
+void alloc_user_pointer(void *vaddr)
+{
+  //printf("alloc_user_pointer called\n");
+  struct thread *cur = thread_current();
+  ASSERT(is_user_vaddr(vaddr));
+
+  if (!pagedir_get_page(cur->pagedir, vaddr))
+  {
+    load_page(vaddr, false);
+    sema_down(&cur->page_sema);
+  }
+}
+
 
 /* find spte with given spte addr
 in pintos reference guide */
 struct spte *lookup_spte(const void *vaddr)
 {
+  //printf("lookup spte called\n");
   struct thread *cur = thread_current();
 
   struct spte spte;
@@ -70,6 +97,7 @@ struct spte *lookup_spte(const void *vaddr)
 static bool
 install_page (void *upage, void *kpage, bool writable)
 {
+  //printf("install page called\n");
   struct thread *t = thread_current ();
 
   /* Verify that there's not already a page at that virtual
