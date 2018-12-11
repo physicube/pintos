@@ -232,6 +232,7 @@ process_wait (tid_t child_tid)
   list_remove(tmp);
   exit_code = tcb->exit_code;
   palloc_free_page(tcb);
+  
   return exit_code;
 }
 
@@ -250,7 +251,9 @@ process_exit (void)
     struct list_elem *elem = list_pop_front (list) ;
     tcb = list_entry(elem, struct tcb, elem);
     if(tcb->exit == true)
+    {
       palloc_free_page(tcb);
+    }
     else
     {
       tcb->goa=true;
@@ -274,16 +277,20 @@ process_exit (void)
   /*
   struct hash *sptable = &cur->sptable;
   sptable_free(sptable);
-  hash_destroy(sptable, NULL);
+  hash_destroy(sptable, spte_free);
+  printf("hash destroyed!\n");
   */
-
+  
   /* wake up parent process */
   cur->tcb->exit = true;
   sema_up(&(cur->tcb->wait_sema));
   
   /*and remove itself if cur thread is orphan */
   if(cur->tcb->goa == true)
+  {
     palloc_free_page(cur->tcb);
+  }
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -296,6 +303,7 @@ process_exit (void)
        directory before destroying the process's page
        directory, or our active page directory will be one
        that's been freed (and cleared). */
+
     cur->pagedir = NULL;
     pagedir_activate (NULL);
     pagedir_destroy (pd);
@@ -592,6 +600,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
     spte->vaddr = (void*)upage;
     spte->fte = NULL;
     spte->type = SPTE_FILE;
+    
     spte->writable = writable;
     spte->file = file;
     spte->ofs = tmp_ofs;

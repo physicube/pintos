@@ -168,7 +168,7 @@ page_fault (struct intr_frame *f)
   //printf("esp %p, eip %p\n", esp, f->eip);
    //printf("pagefault addr: %p, page : %p\n",fault_addr, vaddr);
 
-    if(!user) 
+  if(!user) 
   {
     //printf("kernel page fault occured!\n");
     PANIC("fuck");
@@ -183,6 +183,8 @@ page_fault (struct intr_frame *f)
 
   if (not_present && is_user_vaddr(fault_addr) && (size_t)fault_addr >= (size_t)0x8048000)
   {
+    if(!lookup_spte(vaddr) && !write)
+      sys_exit(-1, NULL);
     load_page(vaddr, true);
     sema_down(&cur->page_sema);
     return;

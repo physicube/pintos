@@ -97,21 +97,46 @@ bool check_validate(void *addr)
 
 void read_mem(void *f, unsigned char *esp, int num, bool is_pointer)
 {
-  printf("readmem start\n");
-  printf("%p\n", esp);
+  struct thread *cur = thread_current();
+  //printf("readmem start\n");
+  //printf("%p\n", esp);
   for(int i = 0; i < num; i++) 
   { 
-    if(check_validate(esp + i)) 
+    if(check_validate(esp + i) && pagedir_get_page(cur->pagedir, pg_round_down(esp + i))) 
       *(char *)(f + i) = read_phys_mem(esp + i) & 0xff; 
     else 
       sys_exit(-1,NULL); 
   }
   if (is_pointer)
   {
+    //printf("is pointer\n");
     void *ptr = *(uint32_t *)f;
+    if (!is_user_vaddr(ptr))
+      sys_exit(-1, NULL);
     alloc_user_pointer(ptr);
+    //printf("readmem %08x done\n", ptr);
+    if (!pagedir_get_page(cur->pagedir, pg_round_down(ptr)))
+      sys_exit(-1, NULL);
+    for(int i = 0; ; i++) 
+    { 
+      int val = read_phys_mem(ptr + i) & 0xff; 
+      if(check_validate(ptr + i)) 
+      {
+        if (pagedir_get_page(cur->pagedir, pg_round_down(ptr + i)))
+        {
+          if (val == 0)
+            break;
+          continue;
+        }
+        else
+          sys_exit(-1, NULL);
+      }
+      else 
+        sys_exit(-1,NULL); 
+    }
+
   }
-  printf("readmem done\n");
+ 
 }
 
 static void
@@ -120,10 +145,15 @@ syscall_handler (struct intr_frame *f)
   int syscall_number;
   void *esp = f->esp;
   //printf("syscall called!\n");
+  if (!grow_stack(esp))
+    sys_exit(-1, NULL);
+  
   if(!check_validate(esp) && !check_validate(esp+4) && ! check_validate(esp+8) && !check_validate(esp+12))
     sys_exit(-1,NULL);
-  
+
   read_mem(&syscall_number, esp, sizeof(syscall_number), false);
+
+  //printf("syscall no %d called\n", syscall_number);
   switch(syscall_number)
   {
     case SYS_HALT: 
@@ -343,7 +373,7 @@ sys_open(char * name, struct intr_frame *f)
   check_memory_byte_by_byte(name,sizeof(name));
   lock_acquire(&memory_lock);
   
-  fd = (struct filedescriptor *)malloc(sizeof(struct filedescriptor));
+  fd = palloc_get_page(0);
   if(fd == NULL)
   {
     free(fd);
@@ -383,7 +413,7 @@ sys_close(int fd_, struct intr_frame *f UNUSED)
     {
       file_close(fd->f);
       list_remove(&(fd->elem));
-      free(fd);
+      palloc_free_page(fd);
     }
     lock_release(&memory_lock);
   }

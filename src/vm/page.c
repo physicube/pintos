@@ -70,7 +70,10 @@ void alloc_user_pointer(void *vaddr)
 {
   //printf("alloc_user_pointer called\n");
   struct thread *cur = thread_current();
-  ASSERT(is_user_vaddr(vaddr));
+  if (!is_user_vaddr(vaddr))
+  {
+    return;
+  }
   void *upage = pg_round_down(vaddr);
 
   while (is_user_vaddr(upage) && lookup_spte(upage))
@@ -84,9 +87,15 @@ void alloc_user_pointer(void *vaddr)
   }
 }
 
-void grow_stack(void *esp)
+bool grow_stack(void *esp)
 {
-
+  struct thread *cur = thread_current();
+  void *upage = pg_round_down(esp);
+  if (!is_user_vaddr(esp))
+    return false;
+  if (upage > PHYS_BASE - STACK_MAX )
+    alloc_user_pointer(esp - 32);
+  return true;
 }
 /* find spte with given spte addr
 in pintos reference guide */
@@ -119,32 +128,31 @@ install_page (void *upage, void *kpage, bool writable)
 void spte_free(struct hash_elem *e, void *aux)
 {
   struct spte *spte = hash_entry(e, struct spte, hash_elem);
-  struct fte *fte = spte->fte;
-  if (fte)
-  {
-    if (fte->magic == 0xdeadbeef)
-      free_frame(spte);
-  }
-  pagedir_clear_page(thread_current()->pagedir, spte->vaddr);
   free(spte);
 }
 void sptable_free(struct hash *sptable)
 {
   struct hash_iterator iter;
   hash_first(&iter, sptable);
-  while (hash_next(&iter))
+  while (true)
   {
+    struct hash_elem *e = hash_next(&iter);
+    if (e == NULL)
+      break;
+    printf("remove sptable %d\n", hash_size(sptable));
     struct spte *spte = hash_entry(hash_cur(&iter), struct spte, hash_elem);
+    if (spte->magic != 0xdeadbeef)
+      continue;
     struct fte *fte = spte->fte;
+
     if (fte)
     {
-      if (fte->magic == 0xdeadbeef)
-        free_frame(spte);
+      if (fte->magic == 0xdeadbeef && fte->spte == spte)
+        free_frame(fte);
+      spte->fte = NULL;
     }
-    if (!pagedir_get_page(thread_current()->pagedir, spte->vaddr))
-      pagedir_clear_page(thread_current()->pagedir, spte->vaddr);
-    free(spte);
   }
+  printf("sptable free done\n");
 }
 
 /* hash function */

@@ -147,13 +147,11 @@ struct fte *evict_frame(void)
   return fte;
 }
 
-void free_frame(struct spte *spte)
+void free_frame(struct fte *fte)
 {
-  lock_acquire(&frame_lock);
-  struct fte* fte = spte->fte;
-  
+  printf("remove frame %p\n", fte->addr);
+  lock_acquire(&frame_lock);  
   palloc_free_page(fte->addr);
-  spte->fte = NULL;
   free(fte);
   lock_release(&frame_lock);
 }

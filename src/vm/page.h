@@ -40,6 +40,7 @@ void sptable_init();
 void spte_free(struct hash_elem *e, void *aux);
 void sptable_free(struct hash *sptable);
 bool load_page(void *vaddr, bool create);
+bool grow_stack(void *esp);
 struct spte *lookup_spte(const void *vaddr);
 void alloc_user_pointer(void *vaddr);
 
