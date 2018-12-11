@@ -81,9 +81,7 @@ void frame_free_internal(void *paddr, bool delete_flag)
   hash_delete(&frame_map, &f->hash_elem);
   list_remove(&f->list_elem);
 
-  // Free resources
-  if (delete_flag)
-    palloc_free_page(paddr);
+  if (delete_flag) palloc_free_page(paddr);
   free(f);
 }
 

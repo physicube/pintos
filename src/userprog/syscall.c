@@ -92,10 +92,7 @@ bool check_validate(void *addr)
 {
   if((addr != NULL) && (((unsigned int)addr) < ((unsigned int)PHYS_BASE)))
   {
-    if(pagedir_get_page(thread_current()->pagedir, addr) != NULL)
-      return true;
-    else
-      return false;
+    return true;
   }
   return false;
 }
@@ -121,7 +118,7 @@ syscall_handler (struct intr_frame *f)
   if(!check_validate(esp) && !check_validate(esp+4) && ! check_validate(esp+8) && !check_validate(esp+12))
     sys_exit(-1,NULL);
   read_mem(&syscall_number, esp, sizeof(syscall_number));
-  printf("[SYSCALL!] sysnumber : %d\n",syscall_number);
+  //printf("[SYSCALL!] sysnumber : %d\n",syscall_number);
   switch(syscall_number)
   {
     case SYS_HALT: 
@@ -408,7 +405,7 @@ sys_close(int fd_, struct intr_frame *f UNUSED)
 void
 sys_read(int fd_, void * buffer, int size, struct intr_frame *f)
 {
-    printf("[Sys read] sysnum : %d, buffer : %p \n",fd_, buffer);
+    //printf("[Sys read] sysnum : %d, buffer : %p \n",fd_, buffer);
 
   check_memory_byte_by_byte(buffer, sizeof(buffer)+size-1);
   lock_acquire(&memory_lock);
