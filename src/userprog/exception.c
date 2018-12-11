@@ -5,7 +5,9 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "userprog/syscall.h"
-
+#include "vm/page.h"
+#include "vm/frame.h"
+#define STACK_SIZE 0x800000
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
@@ -127,7 +129,7 @@ page_fault (struct intr_frame *f)
   bool write;        /* True: access was write, false: access was read. */
   bool user;         /* True: access by user, false: access by kernel. */
   void *fault_addr;  /* Fault address. */
-
+  struct thread *curr = thread_current(); 
   /* Obtain faulting address, the virtual address that was
      accessed to cause the fault.  It may point to code or to
      data.  It is not necessarily the address of the instruction
@@ -149,16 +151,34 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  if(!check_validate(fault_addr))
-    sys_exit(-1,NULL);
-  if(!write)
-    sys_exit(-1,NULL);
-  if(!not_present)
-    sys_exit(-1,NULL);
-  if(fault_addr == NULL)
-    sys_exit(-1,NULL);
-  
+  void* fault_page = (void*) pg_round_down(fault_addr);
+  void* esp = user ? f->esp : curr->esp;
+    //printf("[PAGEFAULT] fault addr: %p, page : %p\n",fault_addr, fault_page);
 
+  if (fault_addr == NULL || !not_present || !is_user_vaddr(fault_addr))
+    sys_exit (-1, NULL);
+  bool is_made = false;
+  
+  if (( (esp <= fault_addr || fault_addr == f->esp - 4 || fault_addr == f->esp - 32)) && 
+        (PHYS_BASE - STACK_SIZE <= fault_addr && fault_addr < PHYS_BASE)) 
+  {
+    if (find_page_by_vaddr(curr->supt, fault_page) == NULL)
+    {
+      is_made = true; // do stack growth.
+      install_frame (curr->supt, fault_page, NULL, false);
+    }
+  }
+  if(!load_page(curr->supt, curr->pagedir, fault_page) ) 
+  {
+    sys_exit(-1,NULL);
+  }
+  return;
+
+ if(!user) { 
+    f->eip = (void *) f->eax;
+    f->eax = 0xffffffff;
+    return;
+  }
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */

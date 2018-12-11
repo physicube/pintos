@@ -478,6 +478,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->current_file=NULL;
   list_init(&t->child_tcb);
   list_init(&t->fd);
+  list_init(&t->mmaped_list);
   #endif
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

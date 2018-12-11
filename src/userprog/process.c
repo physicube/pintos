@@ -20,6 +20,9 @@
 #include "threads/vaddr.h"
 #include "userprog/syscall.h"
 #include "filesys/inode.h"
+#include "vm/page.h"
+#include "vm/frame.h"
+#include "vm/swap.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -108,7 +111,9 @@ start_process (void *ptr)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
+  
   success = load (file_name, &if_.eip, &if_.esp);
+  
   if (success) // push argv to stack
   { 
     char *tmp;
@@ -232,6 +237,7 @@ process_wait (tid_t child_tid)
 void
 process_exit (void)
 {
+  //printf("[PROCESS EXIT] process %s is in exit!\n",thread_current()->name);
   struct thread *cur = thread_current ();
   struct tcb * tcb;
   struct filedescriptor *fd;
@@ -263,7 +269,7 @@ process_exit (void)
     file_allow_write(cur->current_file);
     file_close(cur->current_file);
   }
-  
+  free_page(cur->supt);
   /* wake up parent process */
   cur->tcb->exit = true;
   sema_up(&(cur->tcb->wait_sema));
@@ -390,6 +396,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
+  t->supt = suptable_create();
+
   if (t->pagedir == NULL) 
   {
     success=false;
@@ -469,6 +477,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
                   read_bytes = 0;
                   zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
                 }
+                
               if (!load_segment (file, file_page, (void *) mem_page,
                                  read_bytes, zero_bytes, writable))
                 goto done;
@@ -564,6 +573,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT (ofs % PGSIZE == 0);
 
   file_seek (file, ofs);
+  struct thread * t = thread_current();
   while (read_bytes > 0 || zero_bytes > 0) 
     {
       /* Calculate how to fill this page.
@@ -571,28 +581,15 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
          and zero the final PAGE_ZERO_BYTES bytes. */
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
-
+      
       /* Get a page of memory. */
-      uint8_t *kpage = palloc_get_page (PAL_USER);
-      if (kpage == NULL)
+      if(!install_frame_by_file(t->supt, file, upage, ofs, page_read_bytes, page_zero_bytes, writable))
+      {
         return false;
-
-      /* Load this page. */
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
-        {
-          palloc_free_page (kpage);
-          return false; 
-        }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
-
-      /* Add the page to the process's address space. */
-      if (!install_page (upage, kpage, writable)) 
-        {
-          palloc_free_page (kpage);
-          return false; 
-        }
-
+      }
+     
       /* Advance. */
+      ofs += PGSIZE;
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
       upage += PGSIZE;
@@ -607,15 +604,17 @@ setup_stack (void **esp)
 {
   uint8_t *kpage;
   bool success = false;
+  
 
-  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+  kpage = frame_allocate(PAL_ZERO | PAL_USER, PHYS_BASE - PGSIZE);
+ 
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
         *esp = PHYS_BASE;
       else
-        palloc_free_page (kpage);
+        frame_free_external (kpage, true);
     }
   return success;
 }
@@ -633,9 +632,16 @@ static bool
 install_page (void *upage, void *kpage, bool writable)
 {
   struct thread *t = thread_current ();
-
+  bool success;
   /* Verify that there's not already a page at that virtual
      address, then map our page there. */
-  return (pagedir_get_page (t->pagedir, upage) == NULL
+      
+  success = (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+ 
+  if((success = success && install_frame(t->supt, upage, kpage, true)))
+  {
+    frame_set_is_evict(kpage, false);
+  }
+  return success;
 }

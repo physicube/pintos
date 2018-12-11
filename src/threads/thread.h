@@ -126,8 +126,11 @@ struct thread
     struct list child_tcb;
     struct list fd;
     struct file *current_file;
-#endif
+    struct SPTABLE * supt;
 
+    void * esp;
+#endif
+    struct list mmaped_list;
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };

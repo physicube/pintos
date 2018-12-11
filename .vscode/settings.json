@@ -8,6 +8,9 @@
         "vector": "c",
         "system_error": "c",
         "*.inc": "c",
-        "stdio.h": "c"
+        "stdio.h": "c",
+        "frame.h": "c",
+        "hash.h": "c",
+        "flags.h": "c"
     }
 }

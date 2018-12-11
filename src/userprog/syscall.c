@@ -15,8 +15,11 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "lib/kernel/list.h"
 #include "devices/input.h"
+#include "vm/frame.h"
+#include "vm/page.h"
 
 static void syscall_handler (struct intr_frame *);
 int read_phys_mem(unsigned char *addr);
@@ -37,6 +40,8 @@ void sys_filesize(int , struct intr_frame*);
 void sys_remove(char *, struct intr_frame*);
 void sys_seek(int, int, struct intr_frame * UNUSED);
 void sys_tell(int , struct intr_frame *f);
+void sys_mmap(int, void*, struct intr_frame *);
+void sys_munmap(int);
 static struct filedescriptor * find_fd(int fd_);
 
 void
@@ -80,6 +85,7 @@ bool write_mem(unsigned char *addr, unsigned char byte)
   else
     sys_exit(-1,NULL);
     return false;
+  //p
 }
 
 bool check_validate(void *addr)
@@ -111,10 +117,11 @@ syscall_handler (struct intr_frame *f)
   int syscall_number;
 
   void *esp = f->esp;
+  thread_current()->esp = f->esp;
   if(!check_validate(esp) && !check_validate(esp+4) && ! check_validate(esp+8) && !check_validate(esp+12))
     sys_exit(-1,NULL);
-
   read_mem(&syscall_number, esp, sizeof(syscall_number));
+  printf("[SYSCALL!] sysnumber : %d\n",syscall_number);
   switch(syscall_number)
   {
     case SYS_HALT: 
@@ -162,6 +169,7 @@ syscall_handler (struct intr_frame *f)
     case SYS_OPEN: 
     {
       char *name;
+
       read_mem(&name, esp+4, sizeof(name));
       sys_open(name,f);
       break;
@@ -214,6 +222,22 @@ syscall_handler (struct intr_frame *f)
       int fd;
       read_mem(&fd, esp+4, sizeof(fd));
       sys_close(fd,f);
+      break;
+    }
+    case SYS_MMAP:
+    {
+      int fd;
+      void *addr;
+      read_mem(&fd, esp+4, sizeof(fd));
+      read_mem(&addr, esp+8, sizeof(addr));
+      sys_mmap(fd,addr,f);
+      break;
+    }
+    case SYS_MUNMAP:
+    {
+      int mid;
+      read_mem(&mid, esp+4, sizeof(mid));
+      sys_munmap(mid);
       break;
     }
     default:
@@ -295,9 +319,24 @@ sys_write(int fd_, void * buffer, int size, struct intr_frame *f)
     {
       if (fd->f != NULL)
       {
+        struct SPTE * spte;
+        void *vaddr;
+        struct SPTABLE *supt = thread_current()->supt;
+        uint32_t *pagedir = thread_current()->pagedir;
+        for(vaddr = pg_round_down(buffer); vaddr < buffer + size; vaddr += PGSIZE)
+        {
+          spte = find_page_by_vaddr(supt, vaddr);
+          load_page(supt, pagedir, vaddr);
+          frame_set_is_evict(spte->paddr, true);
+        }
         f->eax = file_write(fd->f, buffer, size);
-        lock_release(&memory_lock);
-        return;
+        for(vaddr = pg_round_down(buffer); vaddr < buffer + size; vaddr += PGSIZE)
+        {
+          spte = find_page_by_vaddr(supt, vaddr);
+          frame_set_is_evict(spte->paddr, false);
+        }
+          lock_release(&memory_lock);
+          return;
       }
     }
     else
@@ -337,6 +376,7 @@ sys_open(char * name, struct intr_frame *f)
 
     f->eax = fd->fd_num;
     lock_release(&memory_lock);
+    //printf("[SYS_OPEN] : fd : %d, name : %s\n",fd->fd_num, name);
     return;
   }
   malicious_ending:
@@ -368,8 +408,9 @@ sys_close(int fd_, struct intr_frame *f UNUSED)
 void
 sys_read(int fd_, void * buffer, int size, struct intr_frame *f)
 {
+    printf("[Sys read] sysnum : %d, buffer : %p \n",fd_, buffer);
+
   check_memory_byte_by_byte(buffer, sizeof(buffer)+size-1);
-  
   lock_acquire(&memory_lock);
   if(fd_ == STDIN) 
   {
@@ -393,10 +434,26 @@ sys_read(int fd_, void * buffer, int size, struct intr_frame *f)
   else
   {
     struct filedescriptor *fd = find_fd(fd_);
-
     if(fd != NULL)
     {
+      struct SPTE * spte;
+      void *vaddr;
+      struct SPTABLE *supt = thread_current()->supt;
+      uint32_t *pagedir = thread_current()->pagedir;
+
+      for(vaddr = pg_round_down(buffer); vaddr < buffer + size; vaddr += PGSIZE)
+      {
+        spte = find_page_by_vaddr(supt, vaddr);
+        load_page(supt, pagedir, vaddr);
+        frame_set_is_evict(spte->paddr, true);
+      }
       f->eax = file_read(fd->f, buffer,size);
+      for(vaddr = pg_round_down(buffer); vaddr <buffer + size; vaddr += PGSIZE)
+      {
+        spte = find_page_by_vaddr(supt, vaddr);
+        frame_set_is_evict(spte->paddr, false);
+      }
+
       lock_release(&memory_lock);
       return;
     }
@@ -462,6 +519,102 @@ sys_tell(int fd_,struct intr_frame *f)
   lock_release(&memory_lock);
 }
 
+void sys_mmap(int fd, void *buffer, struct intr_frame * f)
+{
+  if (buffer == NULL || pg_ofs(buffer) != 0) goto END;
+  if (fd < 2) goto END; 
+
+  struct thread *curr = thread_current();
+  lock_acquire (&memory_lock);
+
+  struct file *file = NULL;
+  struct filedescriptor* fd_ = find_fd(fd);
+  if(fd_ && fd_->f) 
+  {
+    file = file_reopen (fd_->f);
+  }
+  if(file == NULL) goto END;
+
+  size_t file_size = file_length(file);
+  if(file_size == 0) goto END;
+
+  size_t ofs;
+  for (ofs = 0; ofs < file_size; ofs += PGSIZE) 
+  {
+    void *addr = buffer + ofs;
+    if (find_page_by_vaddr(curr->supt, addr)) goto END; 
+  }
+
+  for (ofs = 0; ofs < file_size; ofs += PGSIZE) 
+  {
+    void *addr = buffer + ofs;
+    size_t read_bytes;
+
+    if((ofs + PGSIZE) < file_size)
+      read_bytes = PGSIZE; 
+    else
+     read_bytes = file_size - ofs;
+
+    size_t zero_bytes = PGSIZE - read_bytes;
+    install_frame_by_file(curr->supt, file, addr, ofs, read_bytes, zero_bytes, true);
+  }
+
+  int mid;
+  if (list_empty(&curr->mmaped_list)) 
+  {
+    mid = 1;
+  }
+  else 
+  {
+    mid = list_entry(list_back(&curr->mmaped_list), struct mmap_str, elem)->id + 1;
+  }
+  struct mmap_str *mmap_chunk = (struct mmap_str*) malloc(sizeof(struct mmap_str));
+  mmap_chunk->addr = buffer;
+  mmap_chunk->file_size = file_size;
+  mmap_chunk->id = mid;
+  mmap_chunk->file = file;
+  list_push_back (&curr->mmaped_list, &mmap_chunk->elem);
+  lock_release (&memory_lock);
+  f->eax = mid;
+  return;
+
+END:
+  lock_release (&memory_lock);
+  f->eax =  -1;
+  return;
+}
+
+void sys_munmap(int mid)
+{
+  struct thread *curr = thread_current();
+  struct mmap_str *mmap_chunk = find_mmap_str(curr, mid);
+  void *addr;
+  if(mmap_chunk == NULL) 
+  { 
+    PANIC("[MUNMAP]CANNOT FIND MMAP");
+    return;
+  }
+  lock_acquire (&memory_lock);  
+  {
+    size_t ofs, file_size = mmap_chunk->file_size, bytes;
+    for(ofs = 0; ofs < file_size; ofs += PGSIZE) 
+    {
+       addr = mmap_chunk->addr + ofs;
+       if((ofs + PGSIZE) < file_size)
+        bytes = PGSIZE;
+       else
+        bytes = file_size - ofs;
+       syscall_munmap_help(curr->supt, curr->pagedir, addr, mmap_chunk->file, ofs, bytes);
+    }
+    list_remove(& mmap_chunk->elem);
+    file_close(mmap_chunk->file);
+    free(mmap_chunk);
+  }
+  lock_release (&memory_lock);
+}
+
+
+
 static struct filedescriptor * find_fd(int fd_)
 {
   struct thread *t = thread_current();
@@ -477,4 +630,24 @@ static struct filedescriptor * find_fd(int fd_)
     }
   }
   return NULL;
+}
+
+static struct mmap_str*
+find_mmap_str(struct thread *t, int mid)
+{
+  struct list_elem *elem;
+
+  if (! list_empty(&t->mmaped_list)) {
+    for(elem = list_begin(&t->mmaped_list);
+        elem != list_end(&t->mmaped_list); elem = list_next(elem))
+    {
+      struct mmap_str *mmap = list_entry(elem, struct mmap_str, elem);
+      if(mmap->id == mid) 
+      {
+        return mmap;
+      }
+    }
+  }
+
+  return NULL; // not found
 }
