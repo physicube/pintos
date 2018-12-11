@@ -166,7 +166,9 @@ page_fault (struct intr_frame *f)
   uint32_t *vaddr = pg_round_down(fault_addr);
   void *esp = f->esp;
   //printf("esp %p, eip %p\n", esp, f->eip);
-  if(!user) 
+   printf("pagefault addr: %p, page : %p\n",fault_addr, vaddr);
+
+    if(!user) 
   {
     //printf("kernel page fault occured!\n");
     PANIC("fuck");
@@ -174,29 +176,27 @@ page_fault (struct intr_frame *f)
     f->eip = f->eax;
     f->eax = 0xffffffff;
     return;
-    */
-
   }
   if (esp < PHYS_BASE - STACK_MAX || !is_user_vaddr(esp))
   {
     sys_exit(-1,NULL);
   }
 
-  if (not_present && is_user_vaddr(fault_addr) && fault_addr >= 0x8048000)
+  if (not_present && is_user_vaddr(fault_addr) && (size_t)fault_addr >= (size_t)0x8048000)
   {
     load_page(vaddr, true);
     sema_down(&cur->page_sema);
+    return;
     //printf("page fault handler finished!\n");
   }
-  else
-  {
+
     printf ("Page fault at %p: %s error %s page in %s context.\n",
           fault_addr,
           not_present ? "not present" : "rights violation",
           write ? "writing" : "reading",
           user ? "user" : "kernel");
     sys_exit(-1,NULL);
-  }
+  
 
   
 }

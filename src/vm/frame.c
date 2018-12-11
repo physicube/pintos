@@ -14,7 +14,6 @@
 
 /* ftable is global */
 static struct lock frame_lock;
-static struct hash ftable;
 static struct hash_elem *evict_pin = NULL; /* check from this */
 
 uint32_t frame_hash(const struct hash_elem *p_, void *aux UNUSED)
@@ -31,7 +30,7 @@ bool frame_less(const struct hash_elem *a_, const struct hash_elem *b_, void *au
   return a->addr < b->addr;
 }
 
-void frame_init()
+void frame_init(void)
 {
   lock_init(&frame_lock);
   hash_init(&ftable, frame_hash, frame_less, NULL);
@@ -58,6 +57,7 @@ struct fte *alloc_frame(struct spte *spte)
     hash_insert(&ftable, &fte->hash_elem);
   }
 
+  //printf("[FRAME ALLOC] spte vaddr : %p, fte->addr: %p\n",spte->vaddr, fte->addr);
   fte->spte = spte;
   fte->accessed = true;
   fte->pinned = false;
@@ -69,7 +69,7 @@ struct fte *alloc_frame(struct spte *spte)
     case SPTE_FILE:
     {
       file_read_at(spte->file, new_frame, spte->size, spte->ofs);
-      memset(new_frame + spte->size, 0, PGSIZE);
+      memset(new_frame + spte->size, 0, PGSIZE - spte->size);
       break;
     }
     case SPTE_SWAP:
@@ -85,10 +85,11 @@ struct fte *alloc_frame(struct spte *spte)
   spte->type = SPTE_LIVE;
 
   lock_release(&frame_lock);
+
   return fte;
 }
 
-struct fte *evict_frame()
+struct fte *evict_frame(void)
 {
   //printf("evict frame called\n");
 
@@ -125,7 +126,6 @@ struct fte *evict_frame()
 
     if (spte->writable && !fte->accessed && !fte->pinned)
     {
-      //printf("victim found! %p to %p\n", spte->vaddr, fte->addr);
       fte->pinned = true;
       block_sector_t sector = alloc_swap();
       //printf("empty sector %d\n", sector);

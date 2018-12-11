@@ -52,7 +52,6 @@ file_close (struct file *file)
 {
   if (file != NULL)
     {
-      //printf("%s called file : %x close! \n",thread_current()->name,file);
       file_allow_write (file);
       inode_close (file->inode);
       free (file); 

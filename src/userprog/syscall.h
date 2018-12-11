@@ -13,6 +13,7 @@ struct mmap_str
     struct file * file;
     void * uaddr;
     size_t file_size;
+    size_t cnt;
     struct list_elem elem;
 };
 

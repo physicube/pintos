@@ -343,10 +343,10 @@ sys_open(char * name, struct intr_frame *f)
   check_memory_byte_by_byte(name,sizeof(name));
   lock_acquire(&memory_lock);
   
-  fd = palloc_get_page(0);
+  fd = (struct filedescriptor *)malloc(sizeof(struct filedescriptor));
   if(fd == NULL)
   {
-    palloc_free_page(fd);
+    free(fd);
     goto malicious_ending;
   }
   else
@@ -376,14 +376,14 @@ sys_close(int fd_, struct intr_frame *f UNUSED)
   if(!list_empty(&t->fd))
   {
     lock_acquire(&memory_lock);
-    struct filedescriptor *fd = find_fd(fd_);;
+    struct filedescriptor *fd = find_fd(fd_);
     if (fd == NULL)
       return;
     if(t->tid == fd->master->tid) // check master thread.
     {
       file_close(fd->f);
       list_remove(&(fd->elem));
-      palloc_free_page(fd);
+      free(fd);
     }
     lock_release(&memory_lock);
   }
@@ -520,7 +520,7 @@ void sys_mmap(int fd_, void* buffer, struct intr_frame *f)
       read_b = file_size - ofs;
     zero_b = PGSIZE - read_b;
 
-    struct spte *spte = malloc(sizeof(struct spte));
+    struct spte *spte = (struct spte*)malloc(sizeof(struct spte));
     spte->vaddr = buffer;
     spte->fte = NULL;
     spte->type = SPTE_FILE;
@@ -530,20 +530,23 @@ void sys_mmap(int fd_, void* buffer, struct intr_frame *f)
     spte->size = read_b;
 
     struct hash_elem * prev = hash_insert(&t->sptable, &spte->hash_elem);
-    if(!prev)
+    if(prev != NULL)
     {
       free(spte);
       goto END;
     }
+    counter++;
   }
-  
   mmap_str = (struct mmap_str *)malloc(sizeof(mmap_str));
   mmap_str->file = fd->f;
   mmap_str->file_size = file_size;
   mmap_str->id = give_mpid(&t->mlist);
   mmap_str->uaddr = buffer;
+  mmap_str->cnt = counter;
   list_push_back(&t->mlist, &mmap_str->elem);
   lock_release(&memory_lock);
+  f->eax = mmap_str->id;
+  //printf("[MMAP] created mmap_str addr : %p, file_addr : %p\n",mmap_str, mmap_str->file);
   return;
 
   END:
@@ -557,37 +560,81 @@ void sys_munmap(int mid, struct intr_frame *f)
   struct thread * t = thread_current();
   struct mmap_str * mmap_ = NULL;
   struct list * list = &t->mlist;
-  size_t ofs, file_size, mmap_byte;
-  void * addr;
- 
-  lock_acquire(&memory_lock);
+
   if(!list_empty(list))
   {
     struct list_elem * elem;
     for(elem = list_begin(list); elem != list_end(list); elem = list_next(elem))
     {
       mmap_ = list_entry(elem, struct mmap_str, elem);
+      if(mmap_->id == mid)
+      {
+       // printf("[MUNMAP] mid: %d, vaddr : %p, file : %p \n",mmap_->id, mmap_->uaddr, mmap_->file);
+        list_remove(elem);
+        break;
+      }
+      mmap_ = NULL;
     }
   }
   else
     goto END;
   if(!mmap_) goto END;
+  //printf("[MUNMAP] find mmap_ addr : %p, file_addr : %p\n",mmap_, mmap_->file);
+  size_t cnt = mmap_->cnt;
+  struct spte * spte_tmp;
+  struct spte spte_find;
+  struct hash_elem * tmp_elem;
+  size_t ofs = 0, file_size = mmap_->file_size, byte;
+  void *addr;
 
-  file_size = mmap_->file_size;
+  lock_acquire(&memory_lock);
   for(ofs = 0; ofs < file_size; ofs += PGSIZE)
   {
-    addr = ofs + mmap_->uaddr;
-    if(ofs + PGSIZE < file_size)
-      mmap_byte = PGSIZE;
-    else
-      mmap_byte = file_size - ofs;
-    
+    addr = mmap_->uaddr + ofs;
+    byte = (ofs + PGSIZE < file_size ? PGSIZE : file_size - ofs);
+
+    spte_find.vaddr = addr;
+    tmp_elem = hash_find(&t->sptable, &spte_find.hash_elem);
+    if(tmp_elem == NULL)
+    {
+      PANIC("CANNOT HAPPEND!");
+    }
+    spte_tmp = hash_entry(tmp_elem, struct spte, hash_elem);
+    //printf("[MUNMAP] what is the type? : %d\n",spte_tmp->type);
+    switch(spte_tmp->type)
+    {
+      case SPTE_LIVE:
+      {
+        struct spte * spte_tmp = lookup_spte(addr);
+        spte_tmp->fte->pinned = true;
+        if(pagedir_is_dirty(t->pagedir, spte_tmp->vaddr) || pagedir_is_dirty(t->pagedir, spte_tmp->fte->addr))
+        {
+          file_write_at(mmap_->file, spte_tmp->vaddr, byte, ofs);
+        }
+        //printf("[MUNMAP] fte->addr : %p\n", spte_tmp->fte->addr);
+        palloc_free_page(spte_tmp->fte->addr);
+        free(spte_tmp->fte);
+        pagedir_clear_page(t->pagedir, spte_tmp->vaddr);
+        break;
+      }
+      case SPTE_FILE:
+      {
+        break;
+      }
+      case SPTE_SWAP:
+      {
+
+      }
+      default:
+        PANIC("How can you come here?");
+    }
   }
 
-
+  file_close(mmap_->file);
+  free(mmap_);
+  lock_release(&memory_lock);
 
   END:
-  lock_release(&memory_lock);
   return;
 }
 
