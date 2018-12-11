@@ -124,10 +124,11 @@ bool
 load_page(struct SPTABLE *supt, uint32_t *pagedir, void *vaddr)
 {
   bool writable = true;
+  printf("[Load page] vaddr : %p\n",vaddr);
   struct SPTE *spte = find_page_by_vaddr(supt, vaddr);
   if(spte == NULL)  return false;
   if(spte->status == SPTE_FRAME) return true;
-  //printf("[Load page] vaddr : %p\n",vaddr);
+  
   void *frame_mold = frame_allocate(PAL_USER, vaddr);
   if(frame_mold == NULL) return false;
 

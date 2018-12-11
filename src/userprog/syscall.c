@@ -118,7 +118,7 @@ syscall_handler (struct intr_frame *f)
   if(!check_validate(esp) && !check_validate(esp+4) && ! check_validate(esp+8) && !check_validate(esp+12))
     sys_exit(-1,NULL);
   read_mem(&syscall_number, esp, sizeof(syscall_number));
-  //printf("[SYSCALL!] sysnumber : %d\n",syscall_number);
+  printf("[SYSCALL!] sysnumber : %d\n",syscall_number);
   switch(syscall_number)
   {
     case SYS_HALT: 
@@ -335,6 +335,9 @@ sys_write(int fd_, void * buffer, int size, struct intr_frame *f)
           lock_release(&memory_lock);
           return;
       }
+      lock_release(&memory_lock);
+      f->eax = -1;
+      return;
     }
     else
     {
@@ -405,7 +408,7 @@ sys_close(int fd_, struct intr_frame *f UNUSED)
 void
 sys_read(int fd_, void * buffer, int size, struct intr_frame *f)
 {
-    //printf("[Sys read] sysnum : %d, buffer : %p \n",fd_, buffer);
+  printf("[Sys read] sysnum : %d, buffer : %p \n",fd_, buffer);
 
   check_memory_byte_by_byte(buffer, sizeof(buffer)+size-1);
   lock_acquire(&memory_lock);
@@ -437,11 +440,18 @@ sys_read(int fd_, void * buffer, int size, struct intr_frame *f)
       void *vaddr;
       struct SPTABLE *supt = thread_current()->supt;
       uint32_t *pagedir = thread_current()->pagedir;
-
       for(vaddr = pg_round_down(buffer); vaddr < buffer + size; vaddr += PGSIZE)
       {
         spte = find_page_by_vaddr(supt, vaddr);
-        load_page(supt, pagedir, vaddr);
+        if(!spte && is_user_vaddr(vaddr))
+        {
+            install_frame (supt, vaddr, NULL, true);
+            spte = find_page_by_vaddr(supt, vaddr);
+        }
+        if(!load_page(supt, pagedir, vaddr))
+        {
+          PANIC("[SYS_READ] Page loading fail");
+        }
         frame_set_is_evict(spte->paddr, true);
       }
       f->eax = file_read(fd->f, buffer,size);
@@ -450,7 +460,6 @@ sys_read(int fd_, void * buffer, int size, struct intr_frame *f)
         spte = find_page_by_vaddr(supt, vaddr);
         frame_set_is_evict(spte->paddr, false);
       }
-
       lock_release(&memory_lock);
       return;
     }
@@ -518,11 +527,11 @@ sys_tell(int fd_,struct intr_frame *f)
 
 void sys_mmap(int fd, void *buffer, struct intr_frame * f)
 {
+  lock_acquire (&memory_lock);
   if (buffer == NULL || pg_ofs(buffer) != 0) goto END;
   if (fd < 2) goto END; 
 
   struct thread *curr = thread_current();
-  lock_acquire (&memory_lock);
 
   struct file *file = NULL;
   struct filedescriptor* fd_ = find_fd(fd);

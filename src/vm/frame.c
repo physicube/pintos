@@ -46,7 +46,7 @@ frame_allocate(enum palloc_flags flags, void *vaddr)
     pagedir_clear_page(victim->t->pagedir, victim->vaddr);
     calculate_and_set_dirty_bit(false, victim);
     get_and_set_swap_idx(victim->t->supt, vaddr); // in swap.c
-    frame_free_external(victim->paddr, true); 
+    frame_free_internal(victim->paddr, true); 
     frame_page_palloc = palloc_get_page(PAL_USER | flags); // now, you can allocate new frame.
   }
 

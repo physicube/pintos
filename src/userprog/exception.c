@@ -153,7 +153,7 @@ page_fault (struct intr_frame *f)
 
   void* fault_page = (void*) pg_round_down(fault_addr);
   void* esp = user ? f->esp : curr->esp;
-    //printf("[PAGEFAULT] fault addr: %p, page : %p\n",fault_addr, fault_page);
+  printf("[PAGEFAULT] fault addr: %p, page : %p\n",fault_addr, fault_page);
 
   if (fault_addr == NULL || !not_present || !is_user_vaddr(fault_addr))
     sys_exit (-1, NULL);
