@@ -172,7 +172,6 @@ page_fault (struct intr_frame *f)
   {
     //printf("kernel page fault occured!\n");
     PANIC("fuck");
-    /*
     f->eip = f->eax;
     f->eax = 0xffffffff;
     return;
@@ -189,15 +188,13 @@ page_fault (struct intr_frame *f)
     return;
     //printf("page fault handler finished!\n");
   }
-
+  
     printf ("Page fault at %p: %s error %s page in %s context.\n",
           fault_addr,
           not_present ? "not present" : "rights violation",
           write ? "writing" : "reading",
           user ? "user" : "kernel");
     sys_exit(-1,NULL);
-  
-
   
 }
 
