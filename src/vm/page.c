@@ -61,13 +61,7 @@ bool load_page(void *vaddr, bool create)
 
   //printf("map %p to %p\n", vaddr, fte->addr);
   install_page(vaddr, fte->addr, spte->writable);
-  
   sema_up(&cur->page_sema);
-
-
-
-
-
 
   return true;
 }
@@ -77,15 +71,23 @@ void alloc_user_pointer(void *vaddr)
   //printf("alloc_user_pointer called\n");
   struct thread *cur = thread_current();
   ASSERT(is_user_vaddr(vaddr));
+  void *upage = pg_round_down(vaddr);
 
-  if (!pagedir_get_page(cur->pagedir, vaddr))
+  while (is_user_vaddr(upage) && lookup_spte(upage))
   {
-    load_page(vaddr, false);
-    sema_down(&cur->page_sema);
+    if (!pagedir_get_page(cur->pagedir, upage))
+    {
+      load_page(upage, false);
+      sema_down(&cur->page_sema);
+    }
+    upage += PGSIZE;
   }
 }
 
+void grow_stack(void *esp)
+{
 
+}
 /* find spte with given spte addr
 in pintos reference guide */
 struct spte *lookup_spte(const void *vaddr)

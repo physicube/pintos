@@ -97,20 +97,21 @@ bool check_validate(void *addr)
 
 void read_mem(void *f, unsigned char *esp, int num, bool is_pointer)
 {
-  
-   for(int i = 0; i < num; i++) 
-   { 
+  printf("readmem start\n");
+  printf("%p\n", esp);
+  for(int i = 0; i < num; i++) 
+  { 
     if(check_validate(esp + i)) 
       *(char *)(f + i) = read_phys_mem(esp + i) & 0xff; 
     else 
       sys_exit(-1,NULL); 
-   }
-   uint32_t *pointer = *(uint32_t *)f;
-   if (is_pointer && is_user_vaddr(pointer))
-   {
-     if (lookup_spte(pointer))
-      alloc_user_pointer(pointer);
-   }
+  }
+  if (is_pointer)
+  {
+    void *ptr = *(uint32_t *)f;
+    alloc_user_pointer(ptr);
+  }
+  printf("readmem done\n");
 }
 
 static void
@@ -122,7 +123,6 @@ syscall_handler (struct intr_frame *f)
   if(!check_validate(esp) && !check_validate(esp+4) && ! check_validate(esp+8) && !check_validate(esp+12))
     sys_exit(-1,NULL);
   
-
   read_mem(&syscall_number, esp, sizeof(syscall_number), false);
   switch(syscall_number)
   {

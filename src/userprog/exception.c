@@ -166,7 +166,7 @@ page_fault (struct intr_frame *f)
   uint32_t *vaddr = pg_round_down(fault_addr);
   void *esp = f->esp;
   //printf("esp %p, eip %p\n", esp, f->eip);
-   printf("pagefault addr: %p, page : %p\n",fault_addr, vaddr);
+   //printf("pagefault addr: %p, page : %p\n",fault_addr, vaddr);
 
     if(!user) 
   {
@@ -188,7 +188,7 @@ page_fault (struct intr_frame *f)
     return;
     //printf("page fault handler finished!\n");
   }
-  
+
     printf ("Page fault at %p: %s error %s page in %s context.\n",
           fault_addr,
           not_present ? "not present" : "rights violation",
