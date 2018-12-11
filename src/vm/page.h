@@ -38,6 +38,7 @@ uint32_t spte_hash(const struct hash_elem *p_, void *aux UNUSED);
 bool spte_less(const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED);
 void sptable_init();
 void spte_free(struct hash_elem *e, void *aux);
+void sptable_free(struct hash *sptable);
 bool load_page(void *vaddr, bool create);
 struct spte *lookup_spte(const void *vaddr);
 void alloc_user_pointer(void *vaddr);

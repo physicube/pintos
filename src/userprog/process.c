@@ -271,8 +271,11 @@ process_exit (void)
     file_close(cur->current_file);
   }
   // free supplement page table 
+  /*
   struct hash *sptable = &cur->sptable;
-  hash_destroy(sptable, spte_free);
+  sptable_free(sptable);
+  hash_destroy(sptable, NULL);
+  */
 
   /* wake up parent process */
   cur->tcb->exit = true;
@@ -594,7 +597,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
     spte->ofs = tmp_ofs;
     spte->magic = 0xdeadbeef;
     spte->size = page_read_bytes;
-    spte->is_load = false;
 
     tmp_ofs += page_read_bytes;
     hash_insert(&cur->sptable, &spte->hash_elem);

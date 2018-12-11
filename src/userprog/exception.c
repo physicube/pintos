@@ -169,9 +169,12 @@ page_fault (struct intr_frame *f)
   if(!user) 
   {
     //printf("kernel page fault occured!\n");
+    PANIC("fuck");
+    /*
     f->eip = f->eax;
     f->eax = 0xffffffff;
     return;
+    */
 
   }
   if (esp < PHYS_BASE - STACK_MAX || !is_user_vaddr(esp))

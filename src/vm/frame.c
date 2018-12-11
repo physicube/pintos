@@ -38,7 +38,7 @@ void frame_init()
 }
 
 /* allocate frame of given supplement table entry */
-uint32_t *alloc_frame(struct spte *spte)
+struct fte *alloc_frame(struct spte *spte)
 {
   lock_acquire(&frame_lock);
 
@@ -48,25 +48,18 @@ uint32_t *alloc_frame(struct spte *spte)
   //printf("%d frame allocated %p\n", hash_size(&ftable), new_frame);
   if (!new_frame)
   {
-
     fte = evict_frame();
     new_frame = fte->addr;
   }
   else
   {
     fte = malloc(sizeof(struct fte));
-
     fte->addr = new_frame;
     hash_insert(&ftable, &fte->hash_elem);
-
   }
 
   fte->spte = spte;
   fte->accessed = true;
-  if (spte->writable == false)
-  {
-
-  }
   fte->pinned = false;
   fte->magic = 0xdeadbeef;
   spte->fte = fte;
@@ -92,7 +85,7 @@ uint32_t *alloc_frame(struct spte *spte)
   spte->type = SPTE_LIVE;
 
   lock_release(&frame_lock);
-  return new_frame;
+  return fte;
 }
 
 struct fte *evict_frame()
@@ -156,11 +149,13 @@ struct fte *evict_frame()
 
 void free_frame(struct spte *spte)
 {
+  lock_acquire(&frame_lock);
   struct fte* fte = spte->fte;
   
   palloc_free_page(fte->addr);
   spte->fte = NULL;
   free(fte);
+  lock_release(&frame_lock);
 }
 
 /* find frame with given frame addr

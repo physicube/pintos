@@ -51,16 +51,16 @@ bool load_page(void *vaddr, bool create)
   struct fte *fte = alloc_frame(spte);
   if (!fte)
   {
-    printf("frame alloc failed\n");
+    //printf("frame alloc failed\n");
     PANIC("frame alloc failed\n");
   }
-  //rintf("frame alloc done\n");
+  //printf("frame alloc done\n");
   spte->fte = fte;
   spte->type = SPTE_LIVE;
   spte->is_load = true;
 
-  //printf("map %p to %p\n", vaddr, &fte->addr);
-  install_page(vaddr, &fte->addr, spte->writable);
+  //printf("map %p to %p\n", vaddr, fte->addr);
+  install_page(vaddr, fte->addr, spte->writable);
   
   sema_up(&cur->page_sema);
   return true;
@@ -110,8 +110,33 @@ install_page (void *upage, void *kpage, bool writable)
 /* hash_action_func */
 void spte_free(struct hash_elem *e, void *aux)
 {
-  const struct spte *spte = hash_entry(e, struct spte, hash_elem);
+  struct spte *spte = hash_entry(e, struct spte, hash_elem);
+  struct fte *fte = spte->fte;
+  if (fte)
+  {
+    if (fte->magic == 0xdeadbeef)
+      free_frame(spte);
+  }
+  pagedir_clear_page(thread_current()->pagedir, spte->vaddr);
   free(spte);
+}
+void sptable_free(struct hash *sptable)
+{
+  struct hash_iterator iter;
+  hash_first(&iter, sptable);
+  while (hash_next(&iter))
+  {
+    struct spte *spte = hash_entry(hash_cur(&iter), struct spte, hash_elem);
+    struct fte *fte = spte->fte;
+    if (fte)
+    {
+      if (fte->magic == 0xdeadbeef)
+        free_frame(spte);
+    }
+    if (!pagedir_get_page(thread_current()->pagedir, spte->vaddr))
+      pagedir_clear_page(thread_current()->pagedir, spte->vaddr);
+    free(spte);
+  }
 }
 
 /* hash function */

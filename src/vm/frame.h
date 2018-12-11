@@ -10,8 +10,9 @@
 
 uint32_t frame_hash(const struct hash_elem *p_, void *aux UNUSED);
 bool frame_less(const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED);
-uint32_t *alloc_frame(struct spte *spte);
+struct fte *alloc_frame(struct spte *spte);
 struct fte *evict_frame();
+void free_frame(struct spte *spte);
 void frame_init();
 struct fte *lookup_frame(const void *addr);
 
