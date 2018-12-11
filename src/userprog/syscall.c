@@ -511,6 +511,7 @@ void sys_mmap(int fd_, void* buffer, struct intr_frame *f)
 
   void * addr = NULL;
   size_t read_b, zero_b;
+  size_t counter = 0;
   for(ofs = 0; ofs < file_size; ofs += PGSIZE)
   {
     addr = buffer + ofs;
@@ -535,14 +536,14 @@ void sys_mmap(int fd_, void* buffer, struct intr_frame *f)
       free(spte);
       goto END;
     }
-    //counter++;
+    counter++;
   }
   mmap_str = (struct mmap_str *)malloc(sizeof(mmap_str));
   mmap_str->file = fd->f;
   mmap_str->file_size = file_size;
   mmap_str->id = give_mpid(&t->mlist);
   mmap_str->uaddr = buffer;
-  //mmap_str->cnt = counter;
+  mmap_str->cnt = counter;
   list_push_back(&t->mlist, &mmap_str->elem);
   lock_release(&memory_lock);
   f->eax = mmap_str->id;
